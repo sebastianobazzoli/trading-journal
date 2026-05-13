@@ -8,129 +8,142 @@ url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
-# --- CONFIGURAZIONE E TAILWIND ---
-st.set_page_config(page_title="TradePro Enterprise", layout="wide")
+# --- CONFIGURAZIONE ---
+st.set_page_config(page_title="TradePro Elite", layout="wide")
 
-# Iniezione Tailwind e Lucide Icons (per icone minimal)
+# --- CSS CUSTOM: ELEGANT MINIMALISM ---
 st.markdown("""
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
         
-        * { font-family: 'Inter', sans-serif; }
-        .stApp { background-color: #0B0E14; color: #F8FAF7; }
-        [data-testid="stSidebar"] { background-color: #0F1219 !important; border-right: 1px solid #1E232D; }
-        
-        /* Bottoni Menu Laterale */
-        .nav-btn {
-            display: flex; align-items: center; padding: 10px 16px; border-radius: 6px;
-            color: #94A3B8; text-decoration: none; font-size: 14px; transition: 0.2s; cursor: pointer;
+        :root {
+            --bg-primary: #05070A;
+            --card-bg: rgba(23, 27, 34, 0.7);
+            --accent-blue: #3E63DD;
+            --text-main: #F8FAFC;
+            --border-color: rgba(255, 255, 255, 0.08);
         }
-        .nav-btn:hover { background-color: #1E232D; color: #3B82F6; }
-        .active-btn { background-color: #1E232D; color: #3B82F6; font-weight: 600; }
+
+        * { font-family: 'Plus Jakarta Sans', sans-serif; }
         
-        /* Nascondi elementi Streamlit */
-        [data-testid="stSidebarNav"], footer, #MainMenu { visibility: hidden; }
+        .stApp { background: var(--bg-primary); }
+        
+        /* Sidebar Design */
+        [data-testid="stSidebar"] {
+            background-color: #080A0F !important;
+            border-right: 1px solid var(--border-color);
+        }
+
+        /* Glassmorphism Card */
+        .glass-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            margin-bottom: 20px;
+        }
+
+        /* Metric Styling */
+        .metric-label { color: #64748B; font-size: 11px; font-weight: 700; uppercase; letter-spacing: 1px; }
+        .metric-value { color: #FFFFFF; font-size: 24px; font-weight: 700; margin-top: 4px; }
+        
+        /* Custom Buttons */
+        .stButton>button {
+            background: linear-gradient(135deg, #3E63DD 0%, #2D4699 100%);
+            color: white; border: none; border-radius: 8px;
+            padding: 10px 24px; font-weight: 600; width: 100%; transition: 0.3s;
+        }
+        .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(62, 99, 221, 0.4); }
+
+        /* Remove Streamlit Clutter */
+        #MainMenu, footer, header { visibility: hidden; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- LOGICA NAVIGAZIONE ---
-if 'page' not in st.session_state: st.session_state.page = 'Dashboard'
+# --- NAVIGATION LOGIC ---
+if 'page' not in st.session_state: st.session_state.page = 'Overview'
 
-# --- SIDEBAR MINIMAL ---
+def nav_to(page_name):
+    st.session_state.page = page_name
+
+# --- SIDEBAR NAV ---
 with st.sidebar:
     st.markdown("""
-        <div class="px-4 py-8">
-            <div class="flex items-center space-x-2 mb-10">
-                <div class="h-8 w-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold">T</div>
-                <span class="text-xl font-semibold tracking-tight text-white">TradePro</span>
-            </div>
-            <div class="space-y-1">
-    """, unsafe_allow_html=True)
-
-    # Navigazione manuale tramite bottoni stilizzati
-    if st.button("Analytics Dashboard", use_container_width=True, key="nav_dash"): st.session_state.page = 'Dashboard'
-    if st.button("Portfolios Assets", use_container_width=True, key="nav_port"): st.session_state.page = 'Portafogli'
-    if st.button("New Execution", use_container_width=True, key="nav_trade"): st.session_state.page = 'Trade'
-
-    st.markdown("""
-            </div>
-            <div class="absolute bottom-8 left-8">
-                <div class="flex items-center space-x-2 opacity-50">
-                    <div class="h-2 w-2 bg-green-500 rounded-full"></div>
-                    <span class="text-xs text-slate-400 uppercase tracking-widest">Network Live</span>
-                </div>
-            </div>
+        <div style="padding: 20px 0 40px 0; text-align: left;">
+            <h2 style="color: white; font-weight: 700; font-size: 22px; letter-spacing: -0.5px;">
+                <span style="color: #3E63DD;">●</span> TradePro <span style="font-weight: 300; opacity: 0.6;">Elite</span>
+            </h2>
         </div>
     """, unsafe_allow_html=True)
+    
+    st.button("Dashboard Overview", on_click=nav_to, args=("Overview",))
+    st.button("Multi-Currency Vault", on_click=nav_to, args=("Vault",))
+    st.button("New Execution", on_click=nav_to, args=("Execution",))
 
-# --- HELPER DATABASE ---
+# --- HELPERS ---
 def get_data(table):
     try:
         response = supabase.table(table).select("*").execute()
         return pd.DataFrame(response.data) if response.data else pd.DataFrame()
     except: return pd.DataFrame()
 
-# --- PAGINA: DASHBOARD ---
-if st.session_state.page == 'Dashboard':
-    st.markdown('<div class="px-8 py-10">', unsafe_allow_html=True)
-    st.markdown('<h1 class="text-2xl font-semibold text-white mb-2">Performance Analytics</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="text-slate-500 text-sm mb-8">Asset overview and real-time equity tracking</p>', unsafe_allow_html=True)
+# --- PAGE: OVERVIEW ---
+if st.session_state.page == 'Overview':
+    st.markdown('<h1 style="color: white; font-weight: 700; font-size: 32px; margin-bottom: 8px;">Institutional Overview</h1>', unsafe_allow_html=True)
+    st.markdown('<p style="color: #64748B; margin-bottom: 40px;">Real-time performance metrics and asset allocation.</p>', unsafe_allow_html=True)
     
     bal = get_data("balances")
     if not bal.empty:
         for p in bal['portfolio'].unique():
-            st.markdown(f'<div class="mb-8"><h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-800 pb-2">{p}</h2><div class="grid grid-cols-1 md:grid-cols-4 gap-4">', unsafe_allow_html=True)
+            st.markdown(f'<div style="margin-top: 30px; border-left: 2px solid #3E63DD; padding-left: 15px; margin-bottom: 15px; color: #94A3B8; font-size: 12px; font-weight: 700; text-transform: uppercase;">Account: {p}</div>', unsafe_allow_html=True)
+            cols = st.columns(4)
             p_bal = bal[bal['portfolio'] == p]
-            for _, r in p_bal.iterrows():
-                st.markdown(f"""
-                    <div class="bg-[#161B22] p-5 rounded-lg border border-[#1E232D]">
-                        <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-1">{r["currency"]}</p>
-                        <p class="text-xl font-medium text-white">{r["amount"]:,.2f}</p>
-                    </div>
-                """, unsafe_allow_html=True)
-            st.markdown('</div></div>', unsafe_allow_html=True)
+            for idx, r in enumerate(p_bal.iloc):
+                with cols[idx % 4]:
+                    st.markdown(f"""
+                        <div class="glass-card">
+                            <div class="metric-label">{r["currency"]} BALANCE</div>
+                            <div class="metric-value">{r["amount"]:,.2f}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
     else:
-        st.info("No active portfolios detected.")
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.info("No active accounts. Configure your vault first.")
 
-# --- PAGINA: TRADE ---
-elif st.session_state.page == 'Trade':
-    st.markdown('<div class="px-8 py-10 max-w-2xl">', unsafe_allow_html=True)
-    st.markdown('<h1 class="text-2xl font-semibold text-white mb-6">Execution Log</h1>', unsafe_allow_html=True)
+# --- PAGE: EXECUTION ---
+elif st.session_state.page == 'Execution':
+    st.markdown('<h1 style="color: white; font-weight: 700; font-size: 32px; margin-bottom: 40px;">New Execution</h1>', unsafe_allow_html=True)
     
     with st.container():
-        # Useremo i widget standard ma racchiusi in container Tailwind
-        with st.form("trade_form", clear_on_submit=True):
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        with st.form("exec_form", clear_on_submit=True):
             bal = get_data("balances")
-            p_list = bal['portfolio'].unique().tolist() if not bal.empty else ["No Portfolio"]
+            p_list = bal['portfolio'].unique().tolist() if not bal.empty else ["Standard"]
             
-            p_sel = st.selectbox("Portfolio Account", p_list)
-            c_sel = st.selectbox("Execution Currency", ["EUR", "USD", "BTC", "USDT"])
+            p_sel = st.selectbox("Portfolio Target", p_list)
+            c_sel = st.selectbox("Settlement Currency", ["EUR", "USD", "GBP", "BTC", "USDT"])
             
-            col1, col2 = st.columns(2)
-            asset = col1.text_input("Asset Symbol")
-            side = col2.selectbox("Side", ["Long", "Short"])
+            c1, c2 = st.columns(2)
+            asset = c1.text_input("Instrument Symbol")
+            side = c2.selectbox("Order Side", ["Long", "Short"])
             
-            col3, col4 = st.columns(2)
-            entry = col3.number_input("Entry Price", format="%.5f")
-            exit_p = col4.number_input("Exit Price", format="%.5f")
+            c3, c4 = st.columns(2)
+            entry = c3.number_input("Average Entry", format="%.5f")
+            exit_p = c4.number_input("Average Exit", format="%.5f")
             
-            if st.form_submit_button("Confirm Execution"):
+            if st.form_submit_button("Confirm & Sync"):
                 profit = (exit_p - entry) if side == "Long" else (entry - exit_p)
                 supabase.table("trades").insert({
                     "portfolio": p_sel, "asset": asset, "profit": profit, 
                     "currency": c_sel, "date": str(datetime.date.today())
                 }).execute()
                 
-                # Aggiornamento saldo nel cloud
                 res = supabase.table("balances").select("*").eq("portfolio", p_sel).eq("currency", c_sel).execute()
                 if res.data:
                     new_val = float(res.data[0]['amount']) + profit
                     supabase.table("balances").update({"amount": new_val}).eq("portfolio", p_sel).eq("currency", c_sel).execute()
                 else:
                     supabase.table("balances").insert({"portfolio": p_sel, "currency": c_sel, "amount": profit}).execute()
-                st.toast("Trade recorded successfully")
-
-    st.markdown('</div>', unsafe_allow_html=True)
+                st.success("Execution Synced with Cloud")
+        st.markdown('</div>', unsafe_allow_html=True)
