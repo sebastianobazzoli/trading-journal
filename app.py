@@ -1,132 +1,106 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import datetime
 import os
 
 # --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(
-    page_title="Pro Trading Journal",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Ultimate Trading Journal", page_icon="📊", layout="wide")
 
-# --- STILE CSS PERSONALIZZATO (DARK MODE PRO) ---
+# --- STILE CSS (DARK UI) ---
 st.markdown("""
     <style>
-    .stApp {
-        background-color: #0E1117;
-        color: #E0E0E0;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-        font-weight: 700 !important;
-        color: #00FFA3 !important;
-    }
-    .stDataFrame {
-        border: 1px solid #30363D;
-        border-radius: 10px;
-    }
-    /* Arrotondamento bottoni */
-    .stButton>button {
-        border-radius: 8px;
-        background-color: #5865F2;
-        color: white;
-        width: 100%;
-        border: none;
-        padding: 10px;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #4752C4;
-    }
+    .stApp { background-color: #0E1117; color: #E0E0E0; }
+    [data-testid="stMetricValue"] { color: #00FFA3 !important; font-size: 1.8rem !important; }
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: #161B22; border-radius: 5px; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- GESTIONE DATI (CSV LOCALE) ---
-# Nota: Su Streamlit Cloud i dati CSV sono temporanei.
-# Per renderli permanenti dovrai collegare Google Sheets (chiedimi come appena l'app è online!)
+# --- FUNZIONI DATI ---
 DB_FILE = "trades_database.csv"
-
 def load_data():
     if os.path.exists(DB_FILE):
-        return pd.read_csv(DB_FILE)
+        df = pd.read_csv(DB_FILE)
+        df['Data'] = pd.to_datetime(df['Data'])
+        return df
     return pd.DataFrame(columns=["Data", "Asset", "Tipo", "Entrata", "SL", "TP", "Uscita", "Risultato", "R:R", "Note"])
 
 df = load_data()
 
-# --- SIDEBAR: INSERIMENTO ---
-st.sidebar.header("📝 Registra Operazione")
-with st.sidebar.form("new_trade", clear_on_submit=True):
-    d_date = st.date_input("Data Trade", datetime.date.today())
-    d_asset = st.text_input("Asset", placeholder="es. BTCUSDT")
-    d_side = st.selectbox("Direzione", ["Long", "Short"])
-    
-    col_a, col_b = st.columns(2)
-    d_entry = col_a.number_input("Entrata", format="%.5f", value=0.0)
-    d_sl = col_b.number_input("Stop Loss", format="%.5f", value=0.0)
-    
-    col_c, col_d = st.columns(2)
-    d_tp = col_c.number_input("Take Profit", format="%.5f", value=0.0)
-    d_exit = col_d.number_input("Uscita", format="%.5f", value=0.0)
-    
-    d_notes = st.text_area("Note e Strategia")
-    
-    save = st.form_submit_button("CONFERMA TRADE")
+# --- NAVIGAZIONE SIDEBAR ---
+st.sidebar.title("🚀 TradeMenu")
+page = st.sidebar.radio("Vai a:", ["🏠 Dashboard", "📝 Inserimento Trade", "🔥 Heatmap Operativa"])
 
-    if save:
-        # Calcolo logica semplificata P&L e R:R
-        profit = d_exit - d_entry if d_side == "Long" else d_entry - d_exit
-        risk = abs(d_entry - d_sl)
-        rr = abs(profit / risk) if risk != 0 else 0
+# --- PAGINA 1: DASHBOARD ---
+if page == "🏠 Dashboard":
+    st.title("📈 Global Analytics")
+    if not df.empty:
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Win Rate", f"{(df[df['Risultato']>0].shape[0]/len(df)*100):.1f}%")
+        m2.metric("P&L Totale", f"€ {df['Risultato'].sum():.2f}")
+        m3.metric("Profit Factor", f"{(df[df['Risultato']>0]['Risultato'].sum() / abs(df[df['Risultato']<0]['Risultato'].sum())):.2f}" if any(df['Risultato']<0) else "INF")
+        m4.metric("Trade Totali", len(df))
+
+        st.divider()
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            df_sorted = df.sort_values('Data')
+            df_sorted['Equity'] = df_sorted['Risultato'].cumsum()
+            fig = px.area(df_sorted, x='Data', y='Equity', title="Equity Curve", template="plotly_dark", color_discrete_sequence=['#00FFA3'])
+            st.plotly_chart(fig, use_container_width=True)
+        with c2:
+            fig_pie = px.pie(df, names='Asset', title="Asset Distribution", hole=0.4, template="plotly_dark")
+            st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        st.info("Nessun dato disponibile. Inizia a inserire trade!")
+
+# --- PAGINA 2: INSERIMENTO ---
+elif page == "📝 Inserimento Trade":
+    st.title("📝 New Execution")
+    with st.form("add_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        d_date = col1.date_input("Data", datetime.date.today())
+        d_asset = col2.text_input("Asset (es. NASDAQ, BTC)")
         
-        new_row = pd.DataFrame([[str(d_date), d_asset, d_side, d_entry, d_sl, d_tp, d_exit, profit, rr, d_notes]], 
-                                columns=df.columns)
-        df = pd.concat([df, new_row], ignore_index=True)
-        df.to_csv(DB_FILE, index=False)
-        st.sidebar.success("Trade salvato!")
-        st.rerun()
+        col3, col4, col5 = st.columns(3)
+        d_entry = col3.number_input("Entrata", format="%.5f")
+        d_exit = col4.number_input("Uscita", format="%.5f")
+        d_side = col5.selectbox("Side", ["Long", "Short"])
+        
+        d_notes = st.text_area("Note del Trade")
+        submit = st.form_submit_button("SALVA OPERAZIONE")
 
-# --- DASHBOARD PRINCIPALE ---
-st.title("📈 Trading Dashboard")
+        if submit:
+            profit = (d_exit - d_entry) if d_side == "Long" else (d_entry - d_exit)
+            new_data = pd.DataFrame([[d_date, d_asset, d_side, d_entry, 0, 0, d_exit, profit, 0, d_notes]], columns=df.columns[:10])
+            df = pd.concat([df, new_data], ignore_index=True)
+            df.to_csv(DB_FILE, index=False)
+            st.success("Trade registrato con successo!")
 
-if not df.empty:
-    # Metriche principali
-    wins = df[df['Risultato'] > 0].shape[0]
-    total = df.shape[0]
-    win_rate = (wins / total * 100) if total > 0 else 0
-    pnl_totale = df['Risultato'].sum()
-    avg_rr = df['R:R'].mean()
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Win Rate", f"{win_rate:.1f}%")
-    m2.metric("P&L Netto", f"€ {pnl_totale:.2f}")
-    m3.metric("R:R Medio", f"{avg_rr:.2f}")
-    m4.metric("N° Trade", total)
-
-    st.divider()
-
-    # Grafici
-    g1, g2 = st.columns([2, 1])
-    
-    with g1:
-        st.subheader("Andamento Equity")
-        df['Equity'] = df['Risultato'].cumsum()
-        fig_equity = px.area(df, x=df.index, y='Equity', template="plotly_dark", color_discrete_sequence=['#00FFA3'])
-        fig_equity.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_equity, use_container_width=True)
-
-    with g2:
-        st.subheader("Distribuzione Esiti")
-        # Conta quanti trade sono in profitto vs perdita
-        df['Esito'] = df['Risultato'].apply(lambda x: 'Profit' if x > 0 else 'Loss')
-        fig_pie = px.pie(df, names='Esito', hole=0.4, template="plotly_dark", color_discrete_map={'Profit':'#00FFA3', 'Loss':'#FF4B4B'})
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    # Tabella Storico
-    st.subheader("📜 Storico Operazioni")
-    st.dataframe(df.sort_index(ascending=False), use_container_width=True)
-
-else:
-    st.info("Benvenuto! Inserisci il tuo primo trade nella barra laterale per attivare la dashboard.")
+# --- PAGINA 3: HEATMAP ---
+elif page == "🔥 Heatmap Operativa":
+    st.title("🔥 Market Presence Heatmap")
+    if not df.empty:
+        # Preparazione dati per Heatmap Giornaliera
+        df['Giorno'] = df['Data'].dt.day
+        df['Mese'] = df['Data'].dt.month_name()
+        
+        heatmap_data = df.groupby(['Mese', 'Giorno'])['Risultato'].sum().unstack().fillna(0)
+        
+        st.subheader("Performance Giornaliera (Mese corrente)")
+        fig_heat = px.imshow(heatmap_data, 
+                            labels=dict(x="Giorno del Mese", y="Mese", color="Profitto (€)"),
+                            color_continuous_scale='RdYlGn', 
+                            template="plotly_dark")
+        st.plotly_chart(fig_heat, use_container_width=True)
+        
+        st.divider()
+        st.subheader("Performance Mensile (Anno)")
+        df['Anno'] = df['Data'].dt.year
+        monthly_perf = df.groupby(['Anno', 'Mese'])['Risultato'].sum().unstack().fillna(0)
+        fig_month = px.bar(df.groupby('Mese')['Risultato'].sum(), title="Profitto per Mese", template="plotly_dark", color_value="Risultato", color_continuous_scale='RdYlGn')
+        st.plotly_chart(fig_month, use_container_width=True)
+    else:
+        st.warning("Inserisci dei trade per visualizzare la Heatmap.")
