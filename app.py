@@ -3,89 +3,134 @@ import pandas as pd
 from supabase import create_client, Client
 import datetime
 
-# --- CONNESSIONE CLOUD (SUPABASE) ---
+# --- SETUP SUPABASE ---
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
 # --- CONFIGURAZIONE E TAILWIND ---
-st.set_page_config(page_title="TradePro Cloud", layout="wide")
+st.set_page_config(page_title="TradePro Enterprise", layout="wide")
+
+# Iniezione Tailwind e Lucide Icons (per icone minimal)
 st.markdown("""
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        .stApp { background-color: #0f172a; color: #f8fafc; }
-        [data-testid="stSidebar"] { background-color: #1e293b !important; border-right: 1px solid #334155; }
-        .stButton>button { background-color: #3b82f6; color: white; border-radius: 0.5rem; border: none; width: 100%; transition: 0.2s; }
-        .stButton>button:hover { background-color: #2563eb; transform: translateY(-1px); }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        
+        * { font-family: 'Inter', sans-serif; }
+        .stApp { background-color: #0B0E14; color: #F8FAF7; }
+        [data-testid="stSidebar"] { background-color: #0F1219 !important; border-right: 1px solid #1E232D; }
+        
+        /* Bottoni Menu Laterale */
+        .nav-btn {
+            display: flex; align-items: center; padding: 10px 16px; border-radius: 6px;
+            color: #94A3B8; text-decoration: none; font-size: 14px; transition: 0.2s; cursor: pointer;
+        }
+        .nav-btn:hover { background-color: #1E232D; color: #3B82F6; }
+        .active-btn { background-color: #1E232D; color: #3B82F6; font-weight: 600; }
+        
+        /* Nascondi elementi Streamlit */
+        [data-testid="stSidebarNav"], footer, #MainMenu { visibility: hidden; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNZIONI DI SINCRONIZZAZIONE ---
-def get_data(table):
-    response = supabase.table(table).select("*").execute()
-    return pd.DataFrame(response.data)
-
-def sync_trade(data):
-    supabase.table("trades").insert(data).execute()
-
-def update_balance(p_name, curr, amount):
-    # Logica per aggiornare o inserire il saldo nel cloud
-    res = supabase.table("balances").select("*").eq("portfolio", p_name).eq("currency", curr).execute()
-    if res.data:
-        new_val = res.data[0]['amount'] + amount
-        supabase.table("balances").update({"amount": new_val}).eq("portfolio", p_name).eq("currency", curr).execute()
-    else:
-        supabase.table("balances").insert({"portfolio": p_name, "currency": curr, "amount": amount}).execute()
-
-# --- NAVIGAZIONE ---
+# --- LOGICA NAVIGAZIONE ---
 if 'page' not in st.session_state: st.session_state.page = 'Dashboard'
 
+# --- SIDEBAR MINIMAL ---
 with st.sidebar:
-    st.markdown('<div class="p-6 mb-4"><h1 class="text-white text-2xl font-bold italic">TRADE<span class="text-blue-500">PRO</span></h1><span class="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">CLOUD SYNC</span></div>', unsafe_allow_html=True)
-    if st.button("🏠 Dashboard"): st.session_state.page = 'Dashboard'
-    if st.button("💼 Portafogli"): st.session_state.page = 'Portafogli'
-    if st.button("📝 Nuovo Trade"): st.session_state.page = 'Trade'
+    st.markdown("""
+        <div class="px-4 py-8">
+            <div class="flex items-center space-x-2 mb-10">
+                <div class="h-8 w-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold">T</div>
+                <span class="text-xl font-semibold tracking-tight text-white">TradePro</span>
+            </div>
+            <div class="space-y-1">
+    """, unsafe_allow_html=True)
 
-# --- LOGICA PAGINE ---
+    # Navigazione manuale tramite bottoni stilizzati
+    if st.button("Analytics Dashboard", use_container_width=True, key="nav_dash"): st.session_state.page = 'Dashboard'
+    if st.button("Portfolios Assets", use_container_width=True, key="nav_port"): st.session_state.page = 'Portafogli'
+    if st.button("New Execution", use_container_width=True, key="nav_trade"): st.session_state.page = 'Trade'
+
+    st.markdown("""
+            </div>
+            <div class="absolute bottom-8 left-8">
+                <div class="flex items-center space-x-2 opacity-50">
+                    <div class="h-2 w-2 bg-green-500 rounded-full"></div>
+                    <span class="text-xs text-slate-400 uppercase tracking-widest">Network Live</span>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+# --- HELPER DATABASE ---
+def get_data(table):
+    try:
+        response = supabase.table(table).select("*").execute()
+        return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    except: return pd.DataFrame()
+
+# --- PAGINA: DASHBOARD ---
 if st.session_state.page == 'Dashboard':
-    st.markdown('<h1 class="text-3xl font-bold mb-8">Asset Allocation Live</h1>', unsafe_allow_html=True)
-    bal = get_data("balances")
+    st.markdown('<div class="px-8 py-10">', unsafe_allow_html=True)
+    st.markdown('<h1 class="text-2xl font-semibold text-white mb-2">Performance Analytics</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="text-slate-500 text-sm mb-8">Asset overview and real-time equity tracking</p>', unsafe_allow_html=True)
     
+    bal = get_data("balances")
     if not bal.empty:
         for p in bal['portfolio'].unique():
-            st.markdown(f'<div class="mb-6 p-6 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl"><h3 class="text-blue-400 font-bold mb-4">{p}</h3><div class="grid grid-cols-2 md:grid-cols-4 gap-4">', unsafe_allow_html=True)
+            st.markdown(f'<div class="mb-8"><h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-800 pb-2">{p}</h2><div class="grid grid-cols-1 md:grid-cols-4 gap-4">', unsafe_allow_html=True)
             p_bal = bal[bal['portfolio'] == p]
             for _, r in p_bal.iterrows():
-                st.markdown(f'<div class="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50"><p class="text-slate-500 text-[10px] font-bold uppercase">{r["currency"]}</p><p class="text-2xl font-bold text-white">{r["amount"]:,.2f}</p></div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class="bg-[#161B22] p-5 rounded-lg border border-[#1E232D]">
+                        <p class="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-1">{r["currency"]}</p>
+                        <p class="text-xl font-medium text-white">{r["amount"]:,.2f}</p>
+                    </div>
+                """, unsafe_allow_html=True)
             st.markdown('</div></div>', unsafe_allow_html=True)
     else:
-        st.info("Nessun dato sincronizzato nel cloud.")
+        st.info("No active portfolios detected.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-elif st.session_state.page == 'Portafogli':
-    st.markdown('<h1 class="text-3xl font-bold mb-6">Setup Portafoglio Cloud</h1>', unsafe_allow_html=True)
-    with st.form("conf_p"):
-        c1, c2, c3 = st.columns(3)
-        name = c1.text_input("Nome Account")
-        curr = c2.selectbox("Valuta", ["EUR", "USD", "GBP", "BTC", "USDT"])
-        init_liq = c3.number_input("Versamento Iniziale")
-        if st.form_submit_button("SINCRONIZZA DEPOSITO"):
-            update_balance(name, curr, init_liq)
-            st.success("Dati inviati al database cloud!")
-
+# --- PAGINA: TRADE ---
 elif st.session_state.page == 'Trade':
-    st.markdown('<h1 class="text-3xl font-bold mb-6">Esecuzione Real-Time</h1>', unsafe_allow_html=True)
-    bal = get_data("balances")
-    if not bal.empty:
-        with st.form("trade_form"):
-            p_sel = st.selectbox("Portafoglio", bal['portfolio'].unique())
-            c_sel = st.selectbox("Valuta", bal[bal['portfolio'] == p_sel]['currency'])
-            asset = st.text_input("Asset")
-            side = st.selectbox("Side", ["Long", "Short"])
-            entry = st.number_input("Prezzo Entrata", format="%.5f")
-            exit_p = st.number_input("Prezzo Uscita", format="%.5f")
+    st.markdown('<div class="px-8 py-10 max-w-2xl">', unsafe_allow_html=True)
+    st.markdown('<h1 class="text-2xl font-semibold text-white mb-6">Execution Log</h1>', unsafe_allow_html=True)
+    
+    with st.container():
+        # Useremo i widget standard ma racchiusi in container Tailwind
+        with st.form("trade_form", clear_on_submit=True):
+            bal = get_data("balances")
+            p_list = bal['portfolio'].unique().tolist() if not bal.empty else ["No Portfolio"]
             
-            if st.form_submit_button("ESEGUI E AGGIORNA CLOUD"):
+            p_sel = st.selectbox("Portfolio Account", p_list)
+            c_sel = st.selectbox("Execution Currency", ["EUR", "USD", "BTC", "USDT"])
+            
+            col1, col2 = st.columns(2)
+            asset = col1.text_input("Asset Symbol")
+            side = col2.selectbox("Side", ["Long", "Short"])
+            
+            col3, col4 = st.columns(2)
+            entry = col3.number_input("Entry Price", format="%.5f")
+            exit_p = col4.number_input("Exit Price", format="%.5f")
+            
+            if st.form_submit_button("Confirm Execution"):
                 profit = (exit_p - entry) if side == "Long" else (entry - exit_p)
-                sync_trade({"portfolio": p_sel, "asset": asset, "profit": profit, "currency": c_sel, "date": str(datetime.date.today())})
-                update_balance(p_sel, c_sel, profit)
-                st.balloons()
+                supabase.table("trades").insert({
+                    "portfolio": p_sel, "asset": asset, "profit": profit, 
+                    "currency": c_sel, "date": str(datetime.date.today())
+                }).execute()
+                
+                # Aggiornamento saldo nel cloud
+                res = supabase.table("balances").select("*").eq("portfolio", p_sel).eq("currency", c_sel).execute()
+                if res.data:
+                    new_val = float(res.data[0]['amount']) + profit
+                    supabase.table("balances").update({"amount": new_val}).eq("portfolio", p_sel).eq("currency", c_sel).execute()
+                else:
+                    supabase.table("balances").insert({"portfolio": p_sel, "currency": c_sel, "amount": profit}).execute()
+                st.toast("Trade recorded successfully")
+
+    st.markdown('</div>', unsafe_allow_html=True)
