@@ -61,7 +61,6 @@ if not trades.empty:
 
 # --- 6. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
-    # Market Tickers Wall
     market_tickers = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "BTC/USD": "BTC-USD", "GOLD": "GC=F"}
     t_cols = st.columns(len(market_tickers))
     for i, (name, sym) in enumerate(market_tickers.items()):
@@ -75,7 +74,6 @@ if st.session_state.page == 'DASHBOARD':
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Grafici
     c1, c2 = st.columns([2, 1])
     with c1:
         st.markdown("<div class='ticker-label'>EQUITY_CURVE (CLOSED TRADES)</div>", unsafe_allow_html=True)
@@ -100,7 +98,6 @@ if st.session_state.page == 'DASHBOARD':
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
-    # 1. Form Inserimento
     with st.expander("NEW_TRADE_ENTRY", expanded=False):
         with st.form("t_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3); asset = f1.text_input("TICKER"); instr = f2.selectbox("INSTRUMENT", ["Stock", "CFD", "ETF", "Crypto"]); shares = f3.number_input("SHARES", min_value=0.0, format="%.4f")
@@ -111,11 +108,14 @@ elif st.session_state.page == 'TRADE':
                 supabase.table("trades").insert({"asset": asset, "instrument": instr, "shares": shares, "leverage": lev, "currency": curr, "portfolio": acc, "side": side, "entry_price": entry, "fees": fees, "cost": cost, "notional": entry * shares, "status": "OPEN", "date": str(datetime.date.today()), "profit": 0, "pnl_perc": 0}).execute()
                 st.rerun()
 
-    # 2. INTERACTIVE LEDGER
     if not trades.empty:
-        st.markdown("<div class='ticker-label'>INTERACTIVE_LEDGER (EDIT MODE)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>INTERACTIVE_LEDGER (EDIT & DELETE MODE)</div>", unsafe_allow_html=True)
+        
+        # Aggiungiamo una colonna temporanea per la selezione
+        trades_to_edit = trades.copy()
+        
         edited_trades = st.data_editor(
-            trades, 
+            trades_to_edit, 
             use_container_width=True, 
             hide_index=True, 
             disabled=["id", "cost", "notional", "date", "profit", "pnl_perc"], 
@@ -123,15 +123,27 @@ elif st.session_state.page == 'TRADE':
                 "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"]),
                 "exit_price": st.column_config.NumberColumn("EXIT_PRICE", format="%.2f")
             },
-            key="ledger_final"
+            num_rows="dynamic", # Abilita la possibilità di rimuovere righe con il tasto cancella di sistema
+            key="ledger_v4"
         )
         
-        if st.button("CONFIRM_CHANGES_AND_RECALCULATE"):
+        col_btn1, col_btn2 = st.columns([1, 4])
+        
+        # SALVATAGGIO E RICALCOLO
+        if col_btn1.button("CONFIRM_CHANGES"):
             try:
+                # 1. Identifichiamo le righe eliminate (confronto tra originale e edited)
+                ids_originali = set(trades['id'])
+                ids_rimasti = set(edited_trades['id'])
+                ids_da_eliminare = ids_originali - ids_rimasti
+                
+                for id_del in ids_da_eliminare:
+                    supabase.table("trades").delete().eq("id", id_del).execute()
+
+                # 2. Aggiornamento e Ricalcolo per le righe rimaste
                 for idx, row in edited_trades.iterrows():
                     pnl, p_perc = 0.0, 0.0
                     if row['status'] == "CLOSED" and float(row['exit_price']) > 0:
-                        # LOGICA MATEMATICA CORRETTA
                         side_m = 1 if row['side'] == "LONG" else -1
                         pnl = ((float(row['exit_price']) - float(row['entry_price'])) * float(row['shares']) * side_m) - float(row['fees'])
                         p_perc = (pnl / float(row['cost']) * 100) if float(row['cost']) > 0 else 0.0
@@ -141,10 +153,11 @@ elif st.session_state.page == 'TRADE':
                         "profit": round(pnl, 2), "pnl_perc": round(p_perc, 2),
                         "close_date": str(datetime.date.today()) if row['status'] == "CLOSED" else None
                     }).eq("id", row['id']).execute()
-                st.success("SYNC_COMPLETE"); st.rerun()
+                
+                st.success("DATABASE_SYNCHRONIZED"); st.rerun()
             except Exception as e: st.error(f"SYNC_ERROR: {e}")
 
-        # 3. VISUALIZZAZIONE COLORATA (IL "RESTO" CHE MANCAVA)
+        # 3. VISUALIZZAZIONE COLORATA (SOLA LETTURA)
         st.markdown("---")
         st.markdown("<div class='ticker-label'>FORMATTED_LEDGER (MAGENTA PROFIT | GREEN-RED GAIN)</div>", unsafe_allow_html=True)
         def color_pnl(res):
