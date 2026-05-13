@@ -94,7 +94,7 @@ if st.session_state.page == 'DASHBOARD':
             fig_pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0,r=0,t=0,b=0))
             st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- 7. PAGINA: TRADE EXECUTION ---
+# --- 7. PAGINA: TRADE EXECUTION (TABELLA UNICA) ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
@@ -109,63 +109,62 @@ elif st.session_state.page == 'TRADE':
                 st.rerun()
 
     if not trades.empty:
-        st.markdown("<div class='ticker-label'>INTERACTIVE_LEDGER (EDIT & DELETE MODE)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>ALL_TRADES_LEDGER // [EDIT STATUS/EXIT TO CALC] // [DEL TO REMOVE]</div>", unsafe_allow_html=True)
         
-        # Aggiungiamo una colonna temporanea per la selezione
-        trades_to_edit = trades.copy()
-        
+        # DEFINIZIONE STILE (Magenta, Verde, Rosso)
+        # Nota: Applichiamo lo stile al dataframe PRIMA di darlo all'editor
+        def apply_terminal_style(df):
+            return df.style.apply(lambda x: [
+                'color: #FF00FF' if (col == 'profit' and val > 0) else 
+                'color: #00FF41' if (col == 'pnl_perc' and val > 0) else
+                'color: #FF3131' if (col == 'pnl_perc' and val < 0) else ''
+                for col, val in x.items()
+            ], axis=1)
+
+        # EDITOR UNICO
+        # num_rows="dynamic" permette di selezionare riga e premere Canc
         edited_trades = st.data_editor(
-            trades_to_edit, 
+            apply_terminal_style(trades), 
             use_container_width=True, 
             hide_index=True, 
+            num_rows="dynamic",
             disabled=["id", "cost", "notional", "date", "profit", "pnl_perc"], 
             column_config={
-                "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"]),
+                "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"], required=True),
                 "exit_price": st.column_config.NumberColumn("EXIT_PRICE", format="%.2f")
             },
-            num_rows="dynamic", # Abilita la possibilità di rimuovere righe con il tasto cancella di sistema
-            key="ledger_v4"
+            key="unified_ledger"
         )
         
-        col_btn1, col_btn2 = st.columns([1, 4])
-        
-        # SALVATAGGIO E RICALCOLO
-        if col_btn1.button("CONFIRM_CHANGES"):
+        if st.button("SYNC_TERMINAL_AND_CALCULATE"):
             try:
-                # 1. Identifichiamo le righe eliminate (confronto tra originale e edited)
+                # 1. Gestione CANCELLAZIONI
                 ids_originali = set(trades['id'])
                 ids_rimasti = set(edited_trades['id'])
                 ids_da_eliminare = ids_originali - ids_rimasti
-                
                 for id_del in ids_da_eliminare:
                     supabase.table("trades").delete().eq("id", id_del).execute()
 
-                # 2. Aggiornamento e Ricalcolo per le righe rimaste
+                # 2. Gestione AGGIORNAMENTI E CALCOLI
                 for idx, row in edited_trades.iterrows():
                     pnl, p_perc = 0.0, 0.0
+                    # CALCOLO SE CHIUSO
                     if row['status'] == "CLOSED" and float(row['exit_price']) > 0:
                         side_m = 1 if row['side'] == "LONG" else -1
                         pnl = ((float(row['exit_price']) - float(row['entry_price'])) * float(row['shares']) * side_m) - float(row['fees'])
                         p_perc = (pnl / float(row['cost']) * 100) if float(row['cost']) > 0 else 0.0
                     
+                    # Update Database
                     supabase.table("trades").update({
-                        "status": row['status'], "exit_price": float(row['exit_price']), 
-                        "profit": round(pnl, 2), "pnl_perc": round(p_perc, 2),
+                        "status": row['status'], 
+                        "exit_price": float(row['exit_price']), 
+                        "profit": round(pnl, 2), 
+                        "pnl_perc": round(p_perc, 2),
                         "close_date": str(datetime.date.today()) if row['status'] == "CLOSED" else None
                     }).eq("id", row['id']).execute()
                 
-                st.success("DATABASE_SYNCHRONIZED"); st.rerun()
+                st.success("TERMINAL_SYNCHRONIZED"); st.rerun()
             except Exception as e: st.error(f"SYNC_ERROR: {e}")
-
-        # 3. VISUALIZZAZIONE COLORATA (SOLA LETTURA)
-        st.markdown("---")
-        st.markdown("<div class='ticker-label'>FORMATTED_LEDGER (MAGENTA PROFIT | GREEN-RED GAIN)</div>", unsafe_allow_html=True)
-        def color_pnl(res):
-            styles = pd.DataFrame('', index=res.index, columns=res.columns)
-            styles['profit'] = res['profit'].apply(lambda x: 'color: #FF00FF' if x > 0 else '')
-            styles['pnl_perc'] = res['pnl_perc'].apply(lambda x: 'color: #00FF41' if x > 0 else ('color: #FF3131' if x < 0 else ''))
-            return styles
-        st.dataframe(trades.style.apply(color_pnl, axis=None), use_container_width=True, hide_index=True)
 
 # --- 8. PAGINA: VAULT ---
 elif st.session_state.page == 'VAULT':
