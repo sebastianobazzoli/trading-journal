@@ -6,82 +6,141 @@ import yfinance as yf
 import datetime
 import os
 
-# --- FUNZIONI DI SUPPORTO ---
-def get_benchmark_data(ticker, start_date, end_date):
-    data = yf.download(ticker, start=start_date, end=end_date)['Close']
-    # Normalizziamo a 100 per il confronto (Rendimento percentuale)
-    return (data / data.iloc[0] - 1) * 100
+# --- CONFIGURAZIONE PAGINA ---
+st.set_page_config(
+    page_title="Pro Trading Journal v2.0",
+    page_icon="📊",
+    layout="wide"
+)
 
-# --- PAGINA 1: DASHBOARD ---
+# --- STILE CSS PERSONALIZZATO (DARK UI) ---
+st.markdown("""
+    <style>
+    .stApp { background-color: #0E1117; color: #E0E0E0; }
+    [data-testid="stMetricValue"] { color: #00FFA3 !important; font-size: 1.8rem !important; }
+    .stSidebar { background-color: #161B22; }
+    .stButton>button { width: 100%; border-radius: 5px; background-color: #5865F2; color: white; }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- FUNZIONI DI SUPPORTO DATI ---
+DB_FILE = "trades_database.csv"
+
+def load_data():
+    if os.path.exists(DB_FILE):
+        df = pd.read_csv(DB_FILE)
+        df['Data'] = pd.to_datetime(df['Data'])
+        return df
+    return pd.DataFrame(columns=["Data", "Asset", "Tipo", "Entrata", "SL", "TP", "Uscita", "Risultato", "R:R", "Note"])
+
+def get_benchmark_data(ticker, start_date, end_date):
+    try:
+        data = yf.download(ticker, start=start_date, end=end_date)['Close']
+        if isinstance(data, pd.DataFrame):
+            data = data.iloc[:, 0]
+        return (data / data.iloc[0] - 1) * 100
+    except:
+        return None
+
+# Caricamento database
+df = load_data()
+
+# --- 1. DEFINIZIONE SIDEBAR (Risolve il NameError) ---
+st.sidebar.title("🚀 TradeMenu")
+page = st.sidebar.radio("Navigazione:", ["🏠 Dashboard", "📝 Inserimento Trade", "🔥 Heatmap Operativa"])
+
+# --- 2. LOGICA DELLE PAGINE ---
+
+# --- PAGINA: DASHBOARD ---
 if page == "🏠 Dashboard":
-    st.title("📈 Performance vs Global Benchmarks")
+    st.title("📈 Performance vs Benchmarks")
     
     if not df.empty:
-        # --- FILTRI TIMEFRAME ---
-        st.sidebar.subheader("Filtri Dashboard")
-        timeframe = st.sidebar.selectbox("Seleziona Timeframe", ["Tutto", "Ultimi 30 giorni", "Anno Corrente"])
-        benchmark_ticker = st.sidebar.selectbox("Confronta con Indice", 
-                                              ["S&P 500 (^GSPC)", "NASDAQ (^IXIC)", "DAX (^GDAXI)", "Bitcoin (BTC-USD)"])
-
-        # Filtraggio dati in base al timeframe
+        # Selettori in Sidebar per Dashboard
+        st.sidebar.divider()
+        st.sidebar.subheader("Impostazioni Grafico")
+        timeframe = st.sidebar.selectbox("Timeframe", ["Tutto", "Ultimi 30 giorni", "Anno Corrente"])
+        bench_choice = st.sidebar.selectbox("Benchmark", ["S&P 500 (^GSPC)", "NASDAQ (^IXIC)", "DAX (^GDAXI)", "Bitcoin (BTC-USD)"])
+        
+        # Filtro dati
+        df_filtered = df.copy().sort_values('Data')
         today = pd.to_datetime(datetime.date.today())
-        df_filtered = df.copy()
+        
         if timeframe == "Ultimi 30 giorni":
-            df_filtered = df[df['Data'] >= (today - pd.Timedelta(days=30))]
+            df_filtered = df_filtered[df_filtered['Data'] >= (today - pd.Timedelta(days=30))]
         elif timeframe == "Anno Corrente":
-            df_filtered = df[df['Data'] >= pd.to_datetime(f"{datetime.date.today().year}-01-01")]
+            df_filtered = df_filtered[df_filtered['Data'].dt.year == today.year]
 
-        if df_filtered.empty:
-            st.warning("Nessun trade nel periodo selezionato.")
+        if not df_filtered.empty:
+            # Calcolo Rendimento Utente (Capitale base ipotetico 10k)
+            capitale_iniziale = 10000
+            df_filtered['Rendimento_User'] = (df_filtered['Risultato'].cumsum() / capitale_iniziale) * 100
+            
+            # Recupero Benchmark
+            start_d = df_filtered['Data'].min()
+            end_d = df_filtered['Data'].max() + pd.Timedelta(days=1)
+            bench_ticker = bench_choice.split("(")[1].replace(")", "")
+            bench_series = get_benchmark_data(bench_ticker, start_d, end_d)
+
+            # --- Grafico Comparativo ---
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df_filtered['Data'], y=df_filtered['Rendimento_User'], name="Tu (Relativo %)", line=dict(color='#00FFA3', width=3)))
+            
+            if bench_series is not None:
+                fig.add_trace(go.Scatter(x=bench_series.index, y=bench_series.values, name=bench_choice.split(" ")[0], line=dict(color='#FFB800', dash='dot')))
+            
+            fig.update_layout(template="plotly_dark", title="Confronto Rendimento Percentuale", hovermode="x unified")
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Metriche
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("P&L Totale", f"€ {df_filtered['Risultato'].sum():.2f}")
+            c2.metric("Win Rate", f"{(len(df_filtered[df_filtered['Risultato']>0])/len(df_filtered)*100):.1f}%")
+            c3.metric("Rendimento %", f"{df_filtered['Rendimento_User'].iloc[-1]:.2f}%")
+            c4.metric("Alpha", f"{(df_filtered['Rendimento_User'].iloc[-1] - (bench_series.iloc[-1] if bench_series is not None else 0)):.2f}%")
         else:
-            # Calcolo Rendimento Utente (Percentuale cumulativa)
-            df_sorted = df_filtered.sort_values('Data')
-            # Ipotizziamo un capitale iniziale di 10.000€ se non specificato per il calcolo %
-            capitale_iniziale = 10000 
-            df_sorted['Rendimento_User'] = (df_sorted['Risultato'].cumsum() / capitale_iniziale) * 100
-            
-            # Recupero Dati Benchmark
-            start_d = df_sorted['Data'].min()
-            end_d = df_sorted['Data'].max() + pd.Timedelta(days=1)
-            
-            try:
-                bench_data = get_benchmark_data(benchmark_ticker.split("(")[1].replace(")", ""), start_d, end_d)
-                
-                # --- GRAFICO DI CONFRONTO ---
-                fig_comp = go.Figure()
-                
-                # Linea Utente
-                fig_comp.add_trace(go.Scatter(x=df_sorted['Data'], y=df_sorted['Rendimento_User'],
-                                            mode='lines+markers', name='Tuo Rendimento %',
-                                            line=dict(color='#00FFA3', width=3)))
-                
-                # Linea Benchmark
-                fig_comp.add_trace(go.Scatter(x=bench_data.index, y=bench_data.values,
-                                            mode='lines', name=benchmark_ticker.split(" ")[0],
-                                            line=dict(color='#FFB800', width=2, dash='dot')))
-                
-                fig_comp.update_layout(title=f"Tua Performance vs {benchmark_ticker}",
-                                      template="plotly_dark",
-                                      xaxis_title="Data",
-                                      yaxis_title="Rendimento Percentuale (%)",
-                                      hovermode="x unified")
-                
-                st.plotly_chart(fig_comp, use_container_width=True)
-                
-            except Exception as e:
-                st.error(f"Errore nel caricamento dei dati benchmark: {e}")
-                # Mostra solo il grafico utente se il benchmark fallisce
-                fig_user = px.line(df_sorted, x='Data', y='Rendimento_User', title="Tuo Rendimento %", template="plotly_dark")
-                st.plotly_chart(fig_user, use_container_width=True)
-
-            # Metriche riassuntive
-            c1, c2, c3 = st.columns(3)
-            user_perf = df_sorted['Rendimento_User'].iloc[-1]
-            c1.metric("Tuo Rendimento", f"{user_perf:.2f}%", delta=f"{user_perf:.2f}%")
-            if 'bench_data' in locals():
-                bench_perf = bench_data.iloc[-1]
-                c2.metric(f"Rendimento {benchmark_ticker.split(' ')[0]}", f"{bench_perf:.2f}%")
-                c3.metric("Alpha (Sovraperformance)", f"{(user_perf - bench_perf):.2f}%")
-
+            st.warning("Nessun dato per il timeframe selezionato.")
     else:
-        st.info("Inserisci dei trade per vedere il confronto con i mercati globali.")
+        st.info("Benvenuto! Registra il tuo primo trade per attivare la dashboard.")
+
+# --- PAGINA: INSERIMENTO ---
+elif page == "📝 Inserimento Trade":
+    st.title("📝 Registra Nuova Operazione")
+    with st.form("trade_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        date = c1.date_input("Data", datetime.date.today())
+        asset = c2.text_input("Asset (es. AAPL, BTC)")
+        side = c3.selectbox("Tipo", ["Long", "Short"])
+        
+        c4, c5, c6 = st.columns(3)
+        entry = c4.number_input("Entrata", format="%.5f")
+        exit_p = c5.number_input("Uscita", format="%.5f")
+        notes = c6.text_input("Note veloci")
+        
+        submitted = st.form_submit_button("SALVA TRADE")
+        if submitted:
+            profit = (exit_p - entry) if side == "Long" else (entry - exit_p)
+            new_trade = pd.DataFrame([[date, asset, side, entry, 0, 0, exit_p, profit, 0, notes]], columns=df.columns[:10])
+            df = pd.concat([df, new_trade], ignore_index=True)
+            df.to_csv(DB_FILE, index=False)
+            st.success("Trade salvato correttamente!")
+
+# --- PAGINA: HEATMAP ---
+elif page == "🔥 Heatmap Operativa":
+    st.title("🔥 Analisi Frequenza e Profittabilità")
+    if not df.empty:
+        df['Mese'] = df['Data'].dt.month_name()
+        df['Giorno_Settimana'] = df['Data'].dt.day_name()
+        
+        # Heatmap profitti per Giorno e Mese
+        pivot = df.groupby(['Mese', 'Giorno_Settimana'])['Risultato'].sum().unstack().fillna(0)
+        fig_heat = px.imshow(pivot, text_auto=True, color_continuous_scale='RdYlGn', template="plotly_dark", title="Heatmap Profitti (€)")
+        st.plotly_chart(fig_heat, use_container_width=True)
+        
+        # Bar chart mensile
+        st.divider()
+        monthly_bar = df.groupby('Mese')['Risultato'].sum().reset_index()
+        fig_bar = px.bar(monthly_bar, x='Mese', y='Risultato', color='Risultato', color_continuous_scale='RdYlGn', template="plotly_dark", title="Performance per Mese")
+        st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.warning("Dati insufficienti per generare la Heatmap.")
