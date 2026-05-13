@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 import datetime
 import plotly.graph_objects as go
+import plotly.express as px
 from supabase import create_client, Client
 
 # --- 1. CONFIGURAZIONE ---
@@ -16,19 +17,29 @@ def init_db():
 
 supabase = init_db()
 
-# --- 3. CSS TERMINALE ---
+# --- 3. CSS PROFESSIONALE ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
         html, body, [data-testid="stAppViewContainer"] { background-color: #050505 !important; font-family: 'Roboto Mono', monospace !important; color: #CCC; }
+        header[data-testid="stHeader"] { background-color: rgba(0,0,0,0) !important; color: #00FF41 !important; }
         [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1A1A1A !important; }
+        .panel { border: 1px solid #1A1A1A; padding: 12px; background: #0A0A0A; border-radius: 2px; }
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
-        .stButton>button { background-color: transparent !important; border: 1px solid #222 !important; color: #888 !important; border-radius: 0px !important; text-align: left !important; width: 100%; padding: 10px 15px !important; }
-        header { visibility: hidden; }
+        .ticker-price { font-size: 18px; font-weight: 700; margin-top: 4px; }
+        .stButton>button { background-color: transparent !important; border: 1px solid #222 !important; color: #888 !important; border-radius: 0px !important; text-align: left !important; width: 100%; padding: 10px 15px !important; font-size: 12px !important; }
+        .stButton>button:hover { color: #00FF41 !important; border-color: #00FF41 !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. NAVIGAZIONE ---
+# --- 4. FUNZIONI DATI ---
+def get_data(table):
+    try:
+        res = supabase.table(table).select("*").execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except: return pd.DataFrame()
+
+# --- 5. NAVIGAZIONE ---
 if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
@@ -38,87 +49,117 @@ with st.sidebar:
     st.button("[02] TRADE_EXECUTION", on_click=set_page, args=('TRADE',))
     st.button("[03] VAULT_RESERVES", on_click=set_page, args=('VAULT',))
 
-# Caricamento Dati
-trades = pd.DataFrame(supabase.table("trades").select("*").execute().data) if supabase else pd.DataFrame()
+# Caricamento Dati Globale
+bal = get_data("balances")
+trades = get_data("trades")
 
-# --- 5. PAGINA TRADE EXECUTION (LOGICA CALCOLO CORRETTA) ---
-if st.session_state.page == 'TRADE':
+# Normalizzazione Numerica
+if not trades.empty:
+    num_cols = ['entry_price', 'exit_price', 'shares', 'fees', 'cost', 'profit', 'pnl_perc', 'notional']
+    for c in num_cols:
+        if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').fillna(0.0)
+
+# --- 6. PAGINA: DASHBOARD ---
+if st.session_state.page == 'DASHBOARD':
+    # Market Tickers Wall
+    market_tickers = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "BTC/USD": "BTC-USD", "GOLD": "GC=F"}
+    t_cols = st.columns(len(market_tickers))
+    for i, (name, sym) in enumerate(market_tickers.items()):
+        try:
+            tk = yf.Ticker(sym).history(period="2d")
+            price, change = tk['Close'].iloc[-1], ((tk['Close'].iloc[-1]/tk['Close'].iloc[-2])-1)*100
+            color = "#00FF41" if change > 0 else "#FF3131"
+            with t_cols[i]:
+                st.markdown(f"<div class='panel'><div class='ticker-label'>{name}</div><div class='ticker-price' style='color:{color}'>{price:,.2f} <span style='font-size:10px;'>{change:+.2f}%</span></div></div>", unsafe_allow_html=True)
+        except: pass
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Grafici
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.markdown("<div class='ticker-label'>EQUITY_CURVE (CLOSED TRADES)</div>", unsafe_allow_html=True)
+        if not trades.empty:
+            t_df = trades[trades['status'] == 'CLOSED'].copy()
+            if not t_df.empty:
+                t_df['date'] = pd.to_datetime(t_df['date'])
+                t_df = t_df.sort_values('date')
+                t_df['cum_pnl'] = t_df['profit'].cumsum()
+                fig = go.Figure(go.Scatter(x=t_df['date'], y=t_df['cum_pnl'], mode='lines', line=dict(color='#00FF41', width=2), fill='tozeroy', fillcolor='rgba(0, 255, 65, 0.05)'))
+                fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0,r=0,t=0,b=0))
+                st.plotly_chart(fig, use_container_width=True)
+    with c2:
+        st.markdown("<div class='ticker-label'>ASSET_ALLOCATION</div>", unsafe_allow_html=True)
+        if not trades.empty:
+            alloc = trades.groupby('instrument')['notional'].sum().reset_index()
+            fig_pie = px.pie(alloc, values='notional', names='instrument', hole=.4, color_discrete_sequence=px.colors.sequential.Greens_r)
+            fig_pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0,r=0,t=0,b=0))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+# --- 7. PAGINA: TRADE EXECUTION ---
+elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
-    if not trades.empty:
-        # Conversione tipi per evitare errori matematici
-        num_cols = ['entry_price', 'exit_price', 'shares', 'fees', 'cost', 'profit', 'pnl_perc']
-        for c in num_cols: trades[c] = pd.to_numeric(trades[c], errors='coerce').fillna(0.0)
+    # 1. Form Inserimento
+    with st.expander("NEW_TRADE_ENTRY", expanded=False):
+        with st.form("t_form", clear_on_submit=True):
+            f1, f2, f3 = st.columns(3); asset = f1.text_input("TICKER"); instr = f2.selectbox("INSTRUMENT", ["Stock", "CFD", "ETF", "Crypto"]); shares = f3.number_input("SHARES", min_value=0.0, format="%.4f")
+            f4, f5, f6 = st.columns(3); curr = f4.selectbox("CCY", ["USD", "EUR", "BTC", "USDT"]); acc = f5.selectbox("ACCOUNT", bal['portfolio'].unique() if not bal.empty else ["-"]); side = f6.selectbox("SIDE", ["LONG", "SHORT"])
+            f7, f8, f9 = st.columns(3); entry = f7.number_input("ENTRY", format="%.5f"); lev = f8.number_input("LEVERAGE", min_value=1.0, value=1.0); fees = f9.number_input("FEES", min_value=0.0)
+            if st.form_submit_button("OPEN_POSITION"):
+                cost = ((entry * shares) / lev) + fees
+                supabase.table("trades").insert({"asset": asset, "instrument": instr, "shares": shares, "leverage": lev, "currency": curr, "portfolio": acc, "side": side, "entry_price": entry, "fees": fees, "cost": cost, "notional": entry * shares, "status": "OPEN", "date": str(datetime.date.today()), "profit": 0, "pnl_perc": 0}).execute()
+                st.rerun()
 
-        # 1. EDITOR PER MODIFICA
-        st.markdown("<div class='ticker-label'>EDIT_MODE // CAMBIA STATUS A 'CLOSED' E INSERISCI EXIT_PRICE</div>", unsafe_allow_html=True)
-        edited_df = st.data_editor(
+    # 2. INTERACTIVE LEDGER
+    if not trades.empty:
+        st.markdown("<div class='ticker-label'>INTERACTIVE_LEDGER (EDIT MODE)</div>", unsafe_allow_html=True)
+        edited_trades = st.data_editor(
             trades, 
             use_container_width=True, 
             hide_index=True, 
-            disabled=["id", "cost", "notional", "profit", "pnl_perc", "date"],
+            disabled=["id", "cost", "notional", "date", "profit", "pnl_perc"], 
             column_config={
                 "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"]),
                 "exit_price": st.column_config.NumberColumn("EXIT_PRICE", format="%.2f")
             },
-            key="editor_final"
+            key="ledger_final"
         )
-
-        # 2. LOGICA DI CALCOLO E SALVATAGGIO
-        if st.button("CONFIRM_EXECUTION_AND_CALCULATE"):
+        
+        if st.button("CONFIRM_CHANGES_AND_RECALCULATE"):
             try:
-                for idx, row in edited_df.iterrows():
-                    # Variabili locali forzate a float
-                    entry = float(row['entry_price'])
-                    exit_p = float(row['exit_price'])
-                    qta = float(row['shares'])
-                    comm = float(row['fees'])
-                    costo_iniziale = float(row['cost'])
+                for idx, row in edited_trades.iterrows():
+                    pnl, p_perc = 0.0, 0.0
+                    if row['status'] == "CLOSED" and float(row['exit_price']) > 0:
+                        # LOGICA MATEMATICA CORRETTA
+                        side_m = 1 if row['side'] == "LONG" else -1
+                        pnl = ((float(row['exit_price']) - float(row['entry_price'])) * float(row['shares']) * side_m) - float(row['fees'])
+                        p_perc = (pnl / float(row['cost']) * 100) if float(row['cost']) > 0 else 0.0
                     
-                    pnl_netto = float(row['profit'])
-                    pnl_p = float(row['pnl_perc'])
-
-                    if row['status'] == "CLOSED" and exit_p > 0:
-                        # CALCOLO MATEMATICO (Esempio: (5.00 - 3.76) * 300 - 0 = 372)
-                        side_factor = 1 if row['side'] == "LONG" else -1
-                        pnl_netto = ((exit_p - entry) * qta * side_factor) - comm
-                        pnl_p = (pnl_netto / costo_iniziale * 100) if costo_iniziale > 0 else 0.0
-
-                    # Update Supabase
                     supabase.table("trades").update({
-                        "status": row['status'],
-                        "exit_price": exit_p,
-                        "profit": round(pnl_netto, 2),
-                        "pnl_perc": round(pnl_p, 2),
+                        "status": row['status'], "exit_price": float(row['exit_price']), 
+                        "profit": round(pnl, 2), "pnl_perc": round(p_perc, 2),
                         "close_date": str(datetime.date.today()) if row['status'] == "CLOSED" else None
                     }).eq("id", row['id']).execute()
-                
-                st.success("CALCOLO ESEGUITO: " + str(round(pnl_netto, 2)) + "$")
-                st.rerun()
-            except Exception as e: st.error(f"ERROR: {e}")
+                st.success("SYNC_COMPLETE"); st.rerun()
+            except Exception as e: st.error(f"SYNC_ERROR: {e}")
 
-        # 3. VISUALIZZAZIONE COLORATA (SOLA LETTURA)
+        # 3. VISUALIZZAZIONE COLORATA (IL "RESTO" CHE MANCAVA)
         st.markdown("---")
-        st.markdown("<div class='ticker-label'>LIVE_VIEW // FORMATTED_LEDGER</div>", unsafe_allow_html=True)
-        
-        def style_trades(res):
-            # Magenta per P&L Netto se positivo
-            color_pnl = ['color: #FF00FF' if (v > 0 and res.status.iloc[i] == 'CLOSED') else '' for i, v in enumerate(res.profit)]
-            # Verde/Rosso per P&L%
-            color_perc = ['color: #00FF41' if v > 0 else 'color: #FF3131' if v < 0 else '' for v in res.pnl_perc]
-            
-            return pd.DataFrame({'profit': color_pnl, 'pnl_perc': color_perc}, index=res.index)
+        st.markdown("<div class='ticker-label'>FORMATTED_LEDGER (MAGENTA PROFIT | GREEN-RED GAIN)</div>", unsafe_allow_html=True)
+        def color_pnl(res):
+            styles = pd.DataFrame('', index=res.index, columns=res.columns)
+            styles['profit'] = res['profit'].apply(lambda x: 'color: #FF00FF' if x > 0 else '')
+            styles['pnl_perc'] = res['pnl_perc'].apply(lambda x: 'color: #00FF41' if x > 0 else ('color: #FF3131' if x < 0 else ''))
+            return styles
+        st.dataframe(trades.style.apply(color_pnl, axis=None), use_container_width=True, hide_index=True)
 
-        st.dataframe(trades.style.apply(style_trades, axis=None), use_container_width=True, hide_index=True)
-
-# --- 6. DASHBOARD (Senza rimosse) ---
-elif st.session_state.page == 'DASHBOARD':
-    st.markdown("### / MONITOR_DASHBOARD")
-    if not trades.empty:
-        closed = trades[trades['status'] == 'CLOSED'].copy()
-        if not closed.empty:
-            closed['date'] = pd.to_datetime(closed['date'])
-            closed = closed.sort_values('date')
-            fig = go.Figure(go.Scatter(x=closed['date'], y=closed['profit'].cumsum(), mode='lines', line=dict(color='#00FF41')))
-            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
-            st.plotly_chart(fig, use_container_width=True)
+# --- 8. PAGINA: VAULT ---
+elif st.session_state.page == 'VAULT':
+    st.markdown("### / VAULT_RESERVES")
+    with st.form("v_form"):
+        v1, v2, v3 = st.columns(3); n = v1.text_input("ACCOUNT"); c = v2.selectbox("CCY", ["USD", "EUR", "BTC", "USDT"]); a = v3.number_input("BALANCE")
+        if st.form_submit_button("SYNC_VAULT"):
+            supabase.table("balances").upsert({"portfolio": n, "currency": c, "amount": a}, on_conflict="portfolio,currency").execute()
+            st.rerun()
+    if not bal.empty: st.dataframe(bal, use_container_width=True, hide_index=True)
