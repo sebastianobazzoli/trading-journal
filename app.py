@@ -19,7 +19,7 @@ def init_db():
 
 supabase = init_db()
 
-# --- 3. CSS ---
+# --- 3. CSS ISTITUZIONALE ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
@@ -52,77 +52,95 @@ with st.sidebar:
     st.button("[02] TRADE_EXECUTION", on_click=set_page, args=('TRADE',))
     st.button("[03] VAULT_RESERVES", on_click=set_page, args=('VAULT',))
 
-# Caricamento dati
+# Caricamento dati centralizzato
 bal = get_data("balances")
 trades = get_data("trades")
 
-# --- 6. LOGICA TRADE (FIX ERRORI DATA) ---
+# --- 6. PAGINA: TRADE EXECUTION (AUTO-CALC LOGIC) ---
 if st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
-    with st.expander("NEW_TRADE_ENTRY", expanded=False):
+    # Form per nuove posizioni
+    with st.expander("OPEN_NEW_POSITION", expanded=False):
         with st.form("t_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3); asset = f1.text_input("TICKER"); instr = f2.selectbox("INSTRUMENT", ["Stock", "CFD", "ETF", "Crypto"]); shares = f3.number_input("SHARES", min_value=0.0, format="%.4f")
             f4, f5, f6 = st.columns(3); curr = f4.selectbox("CCY", ["USD", "EUR", "BTC", "USDT"]); acc = f5.selectbox("ACCOUNT", bal['portfolio'].unique() if not bal.empty else ["-"]); side = f6.selectbox("SIDE", ["LONG", "SHORT"])
             f7, f8, f9 = st.columns(3); entry = f7.number_input("ENTRY", format="%.5f"); lev = f8.number_input("LEVERAGE", min_value=1.0, value=1.0); fees = f9.number_input("FEES", min_value=0.0)
-            if st.form_submit_button("COMMIT_NEW_TRADE"):
+            if st.form_submit_button("OPEN_TRADE"):
                 cost = ((entry * shares) / lev) + fees
                 supabase.table("trades").insert({
                     "asset": asset, "instrument": instr, "shares": shares, "leverage": lev, "currency": curr, 
                     "portfolio": acc, "side": side, "entry_price": entry, "fees": fees, "cost": cost, 
-                    "notional": entry * shares, "status": "OPEN", "date": str(datetime.date.today())
+                    "notional": entry * shares, "status": "OPEN", "date": str(datetime.date.today()), "profit": 0, "pnl_perc": 0
                 }).execute()
                 st.rerun()
 
     if not trades.empty:
-        # --- FIX CRITICO PER LE DATE ---
-        # Convertiamo le colonne date in oggetti datetime.date per la compatibilità con st.data_editor
-        if 'date' in trades.columns:
-            trades['date'] = pd.to_datetime(trades['date']).dt.date
+        # Pre-processing date per l'editor
+        trades['date'] = pd.to_datetime(trades['date']).dt.date
         if 'close_date' in trades.columns:
             trades['close_date'] = pd.to_datetime(trades['close_date']).dt.date
         else:
             trades['close_date'] = None
 
-        st.markdown("<div class='ticker-label'>INTERACTIVE_LEDGER</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>ACTIVE_LEDGER / EDITABLE</div>", unsafe_allow_html=True)
         
+        # EDITOR INTERATTIVO
         edited_trades = st.data_editor(
             trades, 
             use_container_width=True, 
             hide_index=True, 
             disabled=["id", "cost", "notional", "profit", "pnl_perc", "date"], 
             column_config={
-                "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"]),
-                "close_date": st.column_config.DateColumn("CLOSE_DATE", format="YYYY-MM-DD"),
-                "date": st.column_config.DateColumn("OPEN_DATE", format="YYYY-MM-DD")
-            }
+                "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"], required=True),
+                "close_date": st.column_config.DateColumn("CLOSE_DATE"),
+                "exit_price": st.column_config.NumberColumn("EXIT_PRICE", format="%.5f")
+            },
+            key="ledger_editor"
         )
         
-        if st.button("SAVE_LEDGER_CHANGES"):
+        if st.button("CONFIRM_CHANGES_AND_CLOSE_POSITIONS"):
             try:
                 for idx, row in edited_trades.iterrows():
-                    pnl, p_perc = row.get('profit', 0), row.get('pnl_perc', 0)
+                    # Individuiamo se il trade è stato appena chiuso
+                    # Carichiamo il valore originale dal DB per confronto se necessario, 
+                    # ma qui ricalcoliamo tutto ciò che è in stato 'CLOSED' per sicurezza.
                     
-                    # Ricalcolo se chiuso
+                    final_pnl = row['profit']
+                    final_perc = row['pnl_perc']
+                    
                     if row['status'] == "CLOSED" and row['exit_price'] > 0:
-                        pnl = (((row['exit_price'] - row['entry_price']) * row['shares']) if row['side'] == "LONG" else ((row['entry_price'] - row['exit_price']) * row['shares'])) - row['fees']
-                        p_perc = (pnl / row['cost']) * 100 if row['cost'] > 0 else 0
-                    
+                        # CALCOLO P&L AUTOMATICO
+                        raw_pnl = ((row['exit_price'] - row['entry_price']) * row['shares']) if row['side'] == "LONG" else ((row['entry_price'] - row['exit_price']) * row['shares'])
+                        final_pnl = raw_pnl - row['fees']
+                        final_perc = (final_pnl / row['cost']) * 100 if row['cost'] > 0 else 0
+                        
+                        # Se il trade era precedentemente OPEN (nel dataframe originale), 
+                        # dobbiamo aggiornare anche il saldo del Vault
+                        original_status = trades.loc[trades['id'] == row['id'], 'status'].values[0]
+                        if original_status == "OPEN":
+                            current_bal_row = bal[(bal['portfolio'] == row['portfolio']) & (bal['currency'] == row['currency'])]
+                            if not current_bal_row.empty:
+                                new_amount = current_bal_row['amount'].values[0] + final_pnl
+                                supabase.table("balances").update({"amount": new_amount}).eq("portfolio", row['portfolio']).eq("currency", row['currency']).execute()
+
+                    # Update record trade
                     update_payload = {
                         "status": row['status'], 
                         "exit_price": row['exit_price'], 
-                        "profit": pnl, 
-                        "pnl_perc": p_perc,
-                        "close_date": str(row['close_date']) if row['close_date'] and not pd.isna(row['close_date']) else None
+                        "profit": final_pnl, 
+                        "pnl_perc": final_perc,
+                        "close_date": str(row['close_date']) if row['close_date'] and not pd.isna(row['close_date']) else str(datetime.date.today())
                     }
                     
                     supabase.table("trades").update(update_payload).eq("id", row['id']).execute()
-                st.success("SYNCED_SUCCESSFULLY")
+                
+                st.success("LEDGER_UPDATED_SYSTEM_RECALCULATED")
                 st.rerun()
             except Exception as e:
-                st.error(f"UPDATE_ERROR: {e}")
+                st.error(f"SYNC_ERROR: {e}")
 
-# --- 7. PAGINA: DASHBOARD (RIPRISTINATA) ---
+# --- 7. PAGINA: DASHBOARD ---
 elif st.session_state.page == 'DASHBOARD':
     # Market Tickers
     market_tickers = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "BTC/USD": "BTC-USD", "GOLD": "GC=F"}
@@ -138,17 +156,20 @@ elif st.session_state.page == 'DASHBOARD':
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Equity Curve
+    # EQUITY CURVE (Usa i dati ricalcolati)
     if not trades.empty:
-        st.markdown("<div class='ticker-label'>EQUITY_CURVE</div>", unsafe_allow_html=True)
-        t_df = trades.copy()
-        t_df['date'] = pd.to_datetime(t_df['date'])
-        t_df = t_df.sort_values('date')
-        t_df['cum_pnl'] = t_df['profit'].cumsum()
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=t_df['date'], y=t_df['cum_pnl'], mode='lines', line=dict(color='#00FF41', width=2), fill='tozeroy', fillcolor='rgba(0, 255, 65, 0.05)'))
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(l=0,r=0,t=10,b=0), xaxis=dict(showgrid=True, gridcolor='#1A1A1A'), yaxis=dict(showgrid=True, gridcolor='#1A1A1A'))
-        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("<div class='ticker-label'>EQUITY_CURVE_ANALYSIS</div>", unsafe_allow_html=True)
+        t_df = trades[trades['status'] == 'CLOSED'].copy() # Mostra solo i trade chiusi nel grafico
+        if not t_df.empty:
+            t_df['date'] = pd.to_datetime(t_df['date'])
+            t_df = t_df.sort_values('date')
+            t_df['cum_pnl'] = t_df['profit'].cumsum()
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=t_df['date'], y=t_df['cum_pnl'], mode='lines', line=dict(color='#00FF41', width=2), fill='tozeroy', fillcolor='rgba(0, 255, 65, 0.05)'))
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(l=0,r=0,t=10,b=0), xaxis=dict(showgrid=True, gridcolor='#1A1A1A'), yaxis=dict(showgrid=True, gridcolor='#1A1A1A'))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("AWAITING_CLOSED_TRADES_FOR_GRAPH")
 
 # --- 8. PAGINA: VAULT ---
 elif st.session_state.page == 'VAULT':
