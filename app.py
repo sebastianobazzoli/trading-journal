@@ -5,10 +5,17 @@ import datetime
 import plotly.graph_objects as go
 from supabase import create_client, Client
 
-# --- 1. CONFIGURAZIONE ---
+# --- CONFIGURAZIONE ---
 st.set_page_config(page_title="TERMINAL_X", layout="wide", initial_sidebar_state="expanded")
 
-# --- 2. CSS ---
+# --- CONNESSIONE ---
+@st.cache_resource
+def init_db():
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+supabase = init_db()
+
+# --- CSS ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
@@ -17,23 +24,10 @@ st.markdown("""
         [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1A1A1A !important; }
         .stButton>button { background-color: transparent !important; border: 1px solid #222 !important; color: #888 !important; border-radius: 0px !important; text-align: left !important; width: 100%; padding: 10px 15px !important; font-size: 12px !important; }
         .stButton>button:hover { color: #00FF41 !important; border-color: #00FF41 !important; }
-        .panel { border: 1px solid #1A1A1A; padding: 12px; background: #0A0A0A; border-radius: 2px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. CONNESSIONE ---
-@st.cache_resource
-def init_db():
-    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-
-supabase = init_db()
-
-# --- 4. FUNZIONI DATI ---
-def get_data(table):
-    res = supabase.table(table).select("*").execute()
-    return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-
-# --- 5. NAVIGAZIONE ---
+# --- NAVIGAZIONE ---
 if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
@@ -43,60 +37,64 @@ with st.sidebar:
     st.button("[02] TRADE_EXECUTION", on_click=set_page, args=('TRADE',))
     st.button("[03] VAULT_RESERVES", on_click=set_page, args=('VAULT',))
 
-# --- 6. LOGICA TRADE (TABELLA MODIFICABILE) ---
+# --- LOGICA TRADE ---
 if st.session_state.page == 'TRADE':
-    st.markdown("### / EXECUTION_LOG / INTERACTIVE_LEDGER")
+    st.markdown("### / EXECUTION_LOG")
     
-    # Form di inserimento rapido (già esistente)
-    with st.expander("NEW_ENTRY_FORM", expanded=False):
-        # ... (Mantieni qui il form di inserimento che abbiamo scritto nell'ultimo script)
-        pass
+    # Recupero dati
+    res = supabase.table("trades").select("*").execute()
+    df_trades = pd.DataFrame(res.data) if res.data else pd.DataFrame()
 
-    # --- LEDGER MODIFICABILE ---
-    df_trades = get_data("trades")
-    
     if not df_trades.empty:
-        st.markdown("<div style='color:#555; font-size:10px; margin-bottom:5px;'>EDIT_MODE: Modifica lo stato o i prezzi direttamente nella tabella e clicca fuori per salvare.</div>", unsafe_allow_html=True)
+        # PROTEZIONE KEYERROR: Se la colonna non esiste nel DB, la creiamo vuota nel DF per non far crashare l'editor
+        if 'close_date' not in df_trades.columns:
+            df_trades['close_date'] = None
+
+        st.markdown("<div style='color:#555; font-size:10px;'>MODIFICA I DATI E SALVA:</div>", unsafe_allow_html=True)
         
-        # Rendiamo la colonna 'id' non modificabile poiché è la chiave primaria
+        # Editor Interattivo
         edited_df = st.data_editor(
             df_trades,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "id": None, # Nasconde l'ID per sicurezza o lo rende bloccato
-                "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"], required=True),
-                "side": st.column_config.SelectboxColumn("SIDE", options=["LONG", "SHORT"]),
-                "instrument": st.column_config.SelectboxColumn("TYPE", options=["Stock", "CFD", "ETF", "Crypto", "Forex"])
+                "id": None, 
+                "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"]),
+                "close_date": st.column_config.DateColumn("CLOSE_DATE")
             },
-            disabled=["id", "cost", "notional", "profit", "pnl_perc", "date"], # Impedisce la modifica manuale dei calcoli
+            disabled=["id", "cost", "notional", "profit", "pnl_perc", "date"],
             key="trades_editor"
         )
 
-        # Logica di salvataggio modifiche
-        if st.button("SAVE_CHANGES_TO_DATABASE"):
-            # Identifichiamo cosa è cambiato confrontando i due dataframe
-            # In un'app reale si userebbe st.session_state.trades_editor["edited_rows"]
-            for index, row in edited_df.iterrows():
-                # Ricalcolo automatico P&L se l'utente ha inserito il prezzo di uscita
-                if row['status'] == "CLOSED" and row['exit_price'] > 0:
-                    pnl = (((row['exit_price'] - row['entry_price']) * row['shares']) if row['side'] == "LONG" else ((row['entry_price'] - row['exit_price']) * row['shares'])) - row['fees']
-                    pnl_p = (pnl / row['cost']) * 100 if row['cost'] > 0 else 0
-                    row['profit'] = pnl
-                    row['pnl_perc'] = pnl_p
+        if st.button("COMMIT_CHANGES_TO_DATABASE"):
+            try:
+                for index, row in edited_df.iterrows():
+                    # Calcolo P&L dinamico se chiuso
+                    p_pnl = row['profit']
+                    p_perc = row['pnl_perc']
+                    
+                    if row['status'] == "CLOSED" and row['exit_price'] > 0:
+                        p_pnl = (((row['exit_price'] - row['entry_price']) * row['shares']) if row['side'] == "LONG" else ((row['entry_price'] - row['exit_price']) * row['shares'])) - row['fees']
+                        p_perc = (p_pnl / row['cost']) * 100 if row['cost'] > 0 else 0
 
-                # Update su Supabase usando l'ID univoco
-                supabase.table("trades").update({
-                    "status": row['status'],
-                    "exit_price": row['exit_price'],
-                    "profit": row['profit'],
-                    "pnl_perc": row['pnl_perc'],
-                    "close_date": str(row['close_date'])
-                }).eq("id", row['id']).execute()
-            
-            st.success("DATABASE_SYNCHRONIZED")
-            st.rerun()
+                    # Update
+                    supabase.table("trades").update({
+                        "status": row['status'],
+                        "exit_price": row['exit_price'],
+                        "profit": p_pnl,
+                        "pnl_perc": p_perc,
+                        "close_date": str(row['close_date']) if row['close_date'] else None
+                    }).eq("id", row['id']).execute()
+                
+                st.success("SYNC_COMPLETE")
+                st.rerun()
+            except Exception as e:
+                st.error(f"UPDATE_ERROR: {e}")
     else:
-        st.info("NO_TRADES_TO_DISPLAY")
+        st.info("NO_TRADES_FOUND")
 
-# --- (Mantieni DASHBOARD e VAULT come nell'ultimo script completo) ---
+# --- DASHBOARD (Semplificata) ---
+elif st.session_state.page == 'DASHBOARD':
+    st.markdown("### / MONITOR_DASHBOARD")
+    st.write("Dati in caricamento...")
+    # (Inserire qui la logica dei ticker e grafici dei messaggi precedenti)
