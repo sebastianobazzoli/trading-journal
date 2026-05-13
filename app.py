@@ -28,7 +28,6 @@ st.markdown("""
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
         .ticker-price { font-size: 18px; font-weight: 700; margin-top: 4px; }
         .stButton>button { background-color: transparent !important; border: 1px solid #222 !important; color: #888 !important; border-radius: 0px !important; text-align: left !important; width: 100%; padding: 10px 15px !important; font-size: 12px !important; }
-        .stButton>button:hover { color: #00FF41 !important; border-color: #00FF41 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -49,18 +48,13 @@ with st.sidebar:
     st.button("[02] TRADE_EXECUTION", on_click=set_page, args=('TRADE',))
     st.button("[03] VAULT_RESERVES", on_click=set_page, args=('VAULT',))
 
-# Caricamento Dati Globale
+# Caricamento Dati
 bal = get_data("balances")
 trades = get_data("trades")
 
-# Normalizzazione Numerica
-if not trades.empty:
-    num_cols = ['entry_price', 'exit_price', 'shares', 'fees', 'cost', 'profit', 'pnl_perc', 'notional']
-    for c in num_cols:
-        if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').fillna(0.0)
-
 # --- 6. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
+    # Ticker Wall
     market_tickers = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "BTC/USD": "BTC-USD", "GOLD": "GC=F"}
     t_cols = st.columns(len(market_tickers))
     for i, (name, sym) in enumerate(market_tickers.items()):
@@ -74,15 +68,16 @@ if st.session_state.page == 'DASHBOARD':
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # Grafici
     c1, c2 = st.columns([2, 1])
     with c1:
-        st.markdown("<div class='ticker-label'>EQUITY_CURVE (CLOSED TRADES)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>EQUITY_CURVE</div>", unsafe_allow_html=True)
         if not trades.empty:
             t_df = trades[trades['status'] == 'CLOSED'].copy()
             if not t_df.empty:
                 t_df['date'] = pd.to_datetime(t_df['date'])
                 t_df = t_df.sort_values('date')
-                t_df['cum_pnl'] = t_df['profit'].cumsum()
+                t_df['cum_pnl'] = pd.to_numeric(t_df['profit']).cumsum()
                 fig = go.Figure(go.Scatter(x=t_df['date'], y=t_df['cum_pnl'], mode='lines', line=dict(color='#00FF41', width=2), fill='tozeroy', fillcolor='rgba(0, 255, 65, 0.05)'))
                 fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0,r=0,t=0,b=0))
                 st.plotly_chart(fig, use_container_width=True)
@@ -94,10 +89,11 @@ if st.session_state.page == 'DASHBOARD':
             fig_pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0,r=0,t=0,b=0))
             st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- 7. PAGINA: TRADE EXECUTION (TABELLA UNICA) ---
+# --- 7. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
+    # Form Inserimento
     with st.expander("NEW_TRADE_ENTRY", expanded=False):
         with st.form("t_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3); asset = f1.text_input("TICKER"); instr = f2.selectbox("INSTRUMENT", ["Stock", "CFD", "ETF", "Crypto"]); shares = f3.number_input("SHARES", min_value=0.0, format="%.4f")
@@ -109,61 +105,51 @@ elif st.session_state.page == 'TRADE':
                 st.rerun()
 
     if not trades.empty:
-        st.markdown("<div class='ticker-label'>ALL_TRADES_LEDGER // [EDIT STATUS/EXIT TO CALC] // [DEL TO REMOVE]</div>", unsafe_allow_html=True)
-        
-        # DEFINIZIONE STILE (Magenta, Verde, Rosso)
-        # Nota: Applichiamo lo stile al dataframe PRIMA di darlo all'editor
-        def apply_terminal_style(df):
-            return df.style.apply(lambda x: [
-                'color: #FF00FF' if (col == 'profit' and val > 0) else 
-                'color: #00FF41' if (col == 'pnl_perc' and val > 0) else
-                'color: #FF3131' if (col == 'pnl_perc' and val < 0) else ''
-                for col, val in x.items()
-            ], axis=1)
+        # Colori: Magenta per Profitto, Verde/Rosso per %
+        def color_ledger(df):
+            styles = pd.DataFrame('', index=df.index, columns=df.columns)
+            styles['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF' if float(x) > 0 else '')
+            styles['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
+            return styles
 
-        # EDITOR UNICO
-        # num_rows="dynamic" permette di selezionare riga e premere Canc
+        st.markdown("<div class='ticker-label'>UNIFIED_LEDGER (EDIT STATUS/EXIT & SYNC)</div>", unsafe_allow_html=True)
+        
+        # EDITOR UNICO CON CANCELLAZIONE RIGHE (Seleziona e premi Canc)
         edited_trades = st.data_editor(
-            apply_terminal_style(trades), 
+            trades.style.apply(color_ledger, axis=None), 
             use_container_width=True, 
             hide_index=True, 
             num_rows="dynamic",
             disabled=["id", "cost", "notional", "date", "profit", "pnl_perc"], 
             column_config={
-                "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"], required=True),
+                "status": st.column_config.SelectboxColumn("STATUS", options=["OPEN", "CLOSED"]),
                 "exit_price": st.column_config.NumberColumn("EXIT_PRICE", format="%.2f")
             },
-            key="unified_ledger"
+            key="terminal_editor"
         )
         
         if st.button("SYNC_TERMINAL_AND_CALCULATE"):
             try:
-                # 1. Gestione CANCELLAZIONI
-                ids_originali = set(trades['id'])
-                ids_rimasti = set(edited_trades['id'])
-                ids_da_eliminare = ids_originali - ids_rimasti
-                for id_del in ids_da_eliminare:
-                    supabase.table("trades").delete().eq("id", id_del).execute()
+                # 1. Gestione cancellazione righe
+                ids_orig = set(trades['id']); ids_new = set(edited_trades['id']); ids_del = ids_orig - ids_new
+                for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
 
-                # 2. Gestione AGGIORNAMENTI E CALCOLI
+                # 2. Ricalcolo e Update
                 for idx, row in edited_trades.iterrows():
-                    pnl, p_perc = 0.0, 0.0
-                    # CALCOLO SE CHIUSO
+                    pnl, perc = 0.0, 0.0
                     if row['status'] == "CLOSED" and float(row['exit_price']) > 0:
-                        side_m = 1 if row['side'] == "LONG" else -1
-                        pnl = ((float(row['exit_price']) - float(row['entry_price'])) * float(row['shares']) * side_m) - float(row['fees'])
-                        p_perc = (pnl / float(row['cost']) * 100) if float(row['cost']) > 0 else 0.0
+                        # FORMULA: ((Exit - Entry) * Qty) - Fees
+                        mult = 1 if row['side'] == "LONG" else -1
+                        pnl = ((float(row['exit_price']) - float(row['entry_price'])) * float(row['shares']) * mult) - float(row['fees'])
+                        perc = (pnl / float(row['cost']) * 100) if float(row['cost']) > 0 else 0.0
                     
-                    # Update Database
                     supabase.table("trades").update({
-                        "status": row['status'], 
-                        "exit_price": float(row['exit_price']), 
-                        "profit": round(pnl, 2), 
-                        "pnl_perc": round(p_perc, 2),
+                        "status": row['status'], "exit_price": float(row['exit_price']), 
+                        "profit": round(pnl, 2), "pnl_perc": round(perc, 2),
                         "close_date": str(datetime.date.today()) if row['status'] == "CLOSED" else None
                     }).eq("id", row['id']).execute()
                 
-                st.success("TERMINAL_SYNCHRONIZED"); st.rerun()
+                st.success("TERMINAL_SYNC_COMPLETE"); st.rerun()
             except Exception as e: st.error(f"SYNC_ERROR: {e}")
 
 # --- 8. PAGINA: VAULT ---
