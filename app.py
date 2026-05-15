@@ -16,7 +16,7 @@ def init_db():
 
 supabase = init_db()
 
-# --- 3. CSS PROFESSIONALE + RE-DESIGN PULSANTE SYNC ---
+# --- 3. CSS PROFESSIONALE (STYLE ISTITUZIONALE) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
@@ -30,42 +30,41 @@ st.markdown("""
         [data-testid="stDataEditor"] div { font-size: 11px !important; }
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
 
-        /* PULSANTE SYNC - CYBERPUNK REDESIGN */
+        /* PULSANTE SYNC - DESIGN PROFESSIONALE MINIMALISTA */
         div.stButton > button:first-child {
-            background-color: transparent !important;
-            color: #00FF41 !important;
-            border: 1px solid #00FF41 !important;
+            background-color: #0A0A0A !important;
+            color: #888 !important;
+            border: 1px solid #1A1A1A !important;
             border-radius: 2px !important;
-            padding: 10px 24px !important;
+            padding: 6px 20px !important;
             font-family: 'Roboto Mono', monospace !important;
-            font-weight: 700 !important;
-            font-size: 12px !important;
+            font-size: 11px !important;
             text-transform: uppercase !important;
-            letter-spacing: 2px !important;
-            transition: all 0.3s ease !important;
-            box-shadow: 0 0 5px rgba(0, 255, 65, 0.2) !important;
-            width: auto !important; /* Non occupa più tutta la larghezza */
-            margin-top: 15px !important;
+            letter-spacing: 1px !important;
+            transition: all 0.2s ease !important;
+            width: auto !important;
+            margin-top: 10px !important;
         }
 
         div.stButton > button:first-child:hover {
-            background-color: rgba(0, 255, 65, 0.1) !important;
-            box-shadow: 0 0 15px rgba(0, 255, 65, 0.6) !important;
+            border-color: #00FF41 !important;
             color: #00FF41 !important;
-            transform: translateY(-1px) !important;
+            background-color: #0F0F0F !important;
         }
 
-        div.stButton > button:first-child:active {
-            transform: translateY(1px) !important;
-        }
-        
-        /* Bottoni Sidebar (rimangono minimali) */
+        /* Bottoni Sidebar */
         [data-testid="stSidebar"] .stButton>button { 
-            border: 1px solid #222 !important; 
-            color: #888 !important; 
+            border: 1px solid #1A1A1A !important; 
+            color: #777 !important; 
             width: 100% !important;
             text-align: left !important;
-            padding: 10px 15px !important;
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+        }
+        
+        [data-testid="stSidebar"] .stButton>button:hover {
+            border-color: #00FF41 !important;
+            color: #00FF41 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -93,22 +92,21 @@ trades = get_data("trades")
 if st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
-    # Form d'inserimento (Expander per pulizia)
     with st.expander("NEW_TRADE_ENTRY", expanded=False):
         with st.form("advanced_trade", clear_on_submit=True):
             r1c1, r1c2, r1c3, r1c4 = st.columns(4)
             asset = r1c1.text_input("TICKER")
             side = r1c2.selectbox("SIDE", ["LONG", "SHORT"])
-            shares = r1c3.number_input("QUANTITÀ", min_value=0.0, step=0.01)
-            entry = r1c4.number_input("ENTRY PRICE", min_value=0.0)
+            shares = r1c3.number_input("QUANTITÀ", min_value=0.0)
+            entry = r1c4.number_input("ENTRY PRICE")
             
             r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-            exit_p = r2c1.number_input("EXIT PRICE", min_value=0.0, value=0.0)
+            exit_p = r2c1.number_input("EXIT PRICE", value=0.0)
             open_d = r2c2.date_input("OPEN DATE", value=datetime.date.today())
             close_d = r2c3.date_input("CLOSE DATE", value=None)
             lev = r2c4.number_input("LEVERAGE", min_value=1.0, value=1.0)
             
-            if st.form_submit_button("REGISTRA POSIZIONE"):
+            if st.form_submit_button("OPEN_POSITION"):
                 status = "CHIUSA" if exit_p > 0 else "APERTA"
                 final_close_date = str(close_d) if (exit_p > 0 and close_d) else (str(datetime.date.today()) if exit_p > 0 else None)
                 cost = round((entry * shares) / lev, 2)
@@ -124,6 +122,7 @@ if st.session_state.page == 'TRADE':
                 st.rerun()
 
     if not trades.empty:
+        # Pulizia display
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
             trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
@@ -133,10 +132,10 @@ if st.session_state.page == 'TRADE':
             styles = pd.DataFrame('', index=df.index, columns=df.columns)
             styles['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF' if float(x) > 0 else '')
             styles['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
-            styles['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
+            styles['status'] = df['status'].apply(lambda x: 'color: #00FF41' if x == "APERTA" else 'color: #555')
             return styles
 
-        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // REAL-TIME MONITOR</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // REGISTERED_TRADES</div>", unsafe_allow_html=True)
         
         edited_trades = st.data_editor(
             trades.style.apply(style_ledger, axis=None), 
@@ -154,11 +153,10 @@ if st.session_state.page == 'TRADE':
                 "pnl_perc": st.column_config.NumberColumn("%", format="%.2f%%", width=65),
                 "status": st.column_config.TextColumn("STATO", width=80)
             },
-            key="terminal_v_final"
+            key="terminal_v_clean"
         )
         
-        # IL PULSANTE ORA HA UN DESIGN DEDICATO NEL CSS
-        if st.button("SYNCHRONIZE_TERMINAL"):
+        if st.button("SYNCHRONIZE"):
             try:
                 ids_del = set(trades['id']) - set(edited_trades['id'])
                 for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
@@ -176,4 +174,4 @@ if st.session_state.page == 'TRADE':
                 st.rerun()
             except: pass
 
-# --- DASHBOARD & Altro (Invariati) ---
+# --- 8. DASHBOARD & VAULT (Invariati) ---
