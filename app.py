@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from supabase import create_client, Client
 
-# --- 1. CONFIGURAZIONE (WIDE MODE) ---
+# --- 1. CONFIGURAZIONE ---
 st.set_page_config(page_title="TERMINAL_X", layout="wide", initial_sidebar_state="expanded")
 
 # --- 2. CONNESSIONE ---
@@ -17,31 +17,38 @@ def init_db():
 
 supabase = init_db()
 
-# --- 3. CSS "FULL-WIDTH" (SIDEBAR FISSA + TABELLA COMPATTA) ---
+# --- 3. CSS PROFESSIONALE (CORREZIONE SOVRAPPOSIZIONE) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
         
-        /* Forza l'uso di tutto lo schermo */
+        /* 1. Spostamento contenuto principale sotto l'header di Streamlit */
         .block-container { 
-            padding: 1rem 1rem !important; 
+            padding-top: 4rem !important; 
+            padding-left: 2rem !important; 
+            padding-right: 2rem !important; 
             max-width: 100% !important;
         }
 
+        /* 2. Sfondo e font globale */
         html, body, [data-testid="stAppViewContainer"] { 
             background-color: #050505 !important; 
             font-family: 'Roboto Mono', monospace !important; 
             color: #CCC; 
         }
 
-        [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1A1A1A !important; }
-        .panel { border: 1px solid #1A1A1A; padding: 10px; background: #0A0A0A; border-radius: 2px; }
+        /* 3. Sidebar distanziata e stilizzata */
+        [data-testid="stSidebar"] { 
+            background-color: #080808 !important; 
+            border-right: 1px solid #1A1A1A !important;
+            padding-top: 2rem !important;
+        }
+
+        /* 4. Pannelli e Ticker */
+        .panel { border: 1px solid #1A1A1A; padding: 12px; background: #0A0A0A; border-radius: 2px; }
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
 
-        /* Riduzione drastica font tabella per fit orizzontale */
-        [data-testid="stDataEditor"] div { font-size: 11px !important; }
-        
-        /* Bottoni Sidebar */
+        /* 5. Bottoni Sidebar */
         .stButton>button { 
             background-color: transparent !important; 
             border: 1px solid #222 !important; 
@@ -49,9 +56,13 @@ st.markdown("""
             border-radius: 0px !important; 
             width: 100% !important;
             text-align: left !important;
-            padding: 8px 12px !important;
+            padding: 10px 15px !important;
+            margin-bottom: 5px;
         }
         .stButton>button:hover { border-color: #00FF41 !important; color: #00FF41 !important; }
+
+        /* 6. Ottimizzazione Tabella per evitare scroll orizzontale */
+        [data-testid="stDataEditor"] div { font-size: 11px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,7 +78,7 @@ if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
 with st.sidebar:
-    st.markdown("<div style='color:#00FF41; font-weight:700; font-size:18px; margin-bottom:15px;'>TERMINAL_OS</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#00FF41; font-weight:700; font-size:18px; margin-bottom:20px;'>TERMINAL_OS</div>", unsafe_allow_html=True)
     st.button("[01] MONITOR_DASHBOARD", on_click=set_page, args=('DASHBOARD',))
     st.button("[02] TRADE_EXECUTION", on_click=set_page, args=('TRADE',))
     st.button("[03] VAULT_RESERVES", on_click=set_page, args=('VAULT',))
@@ -75,8 +86,9 @@ with st.sidebar:
 trades = get_data("trades")
 bal = get_data("balances")
 
-# --- 6. DASHBOARD ---
+# --- 6. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
+    st.markdown("### / MONITOR_DASHBOARD")
     market_tickers = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "BTC/USD": "BTC-USD", "GOLD": "GC=F"}
     t_cols = st.columns(len(market_tickers))
     for i, (name, sym) in enumerate(market_tickers.items()):
@@ -85,7 +97,7 @@ if st.session_state.page == 'DASHBOARD':
             price, change = tk['Close'].iloc[-1], ((tk['Close'].iloc[-1]/tk['Close'].iloc[-2])-1)*100
             color = "#00FF41" if change > 0 else "#FF3131"
             with t_cols[i]:
-                st.markdown(f"<div class='panel'><div class='ticker-label'>{name}</div><div style='font-size:16px; font-weight:700; color:{color}'>{price:,.2f} <span style='font-size:9px;'>{change:+.2f}%</span></div></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='panel'><div class='ticker-label'>{name}</div><div style='font-size:18px; font-weight:700; color:{color}'>{price:,.2f} <span style='font-size:10px;'>{change:+.2f}%</span></div></div>", unsafe_allow_html=True)
         except: pass
     
     st.markdown("<br>", unsafe_allow_html=True)
@@ -99,12 +111,12 @@ if st.session_state.page == 'DASHBOARD':
             fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0,r=0,t=10,b=0), xaxis=dict(gridcolor='#1A1A1A'), yaxis=dict(gridcolor='#1A1A1A'))
             st.plotly_chart(fig, use_container_width=True)
 
-# --- 7. TRADE EXECUTION (FULL-WIDTH & ROUNDED) ---
+# --- 7. PAGINA: TRADE EXECUTION (FULL-WIDTH & ROUNDED) ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
     if not trades.empty:
-        # Arrotondamento forzato alla seconda cifra decimale per la tabella
+        # Arrotondamento forzato alla seconda cifra decimale
         cols_round = ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'fees', 'cost', 'leverage']
         for c in cols_round:
             if c in trades.columns:
@@ -116,9 +128,9 @@ elif st.session_state.page == 'TRADE':
             styles['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
             return styles
 
-        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // ALL_VISIBLE</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // NO_SCROLL_MODE</div>", unsafe_allow_html=True)
         
-        # EDITOR OTTIMIZZATO PER EVITARE SCROLL ORIZZONTALE
+        # TABELLA OTTIMIZZATA PER LARGHEZZA TOTALE
         edited_trades = st.data_editor(
             trades.style.apply(color_ledger, axis=None), 
             use_container_width=True, 
@@ -138,7 +150,7 @@ elif st.session_state.page == 'TRADE':
                 "fees": st.column_config.NumberColumn("FEE", format="%.2f", width=55),
                 "leverage": st.column_config.NumberColumn("LV", format="x%d", width=45)
             },
-            key="fit_editor_final"
+            key="terminal_editor_final"
         )
         
         if st.button("SYNC_AND_CALC"):
@@ -164,3 +176,8 @@ elif st.session_state.page == 'TRADE':
                     }).eq("id", row['id']).execute()
                 st.rerun()
             except: pass
+
+# --- 8. VAULT ---
+elif st.session_state.page == 'VAULT':
+    st.markdown("### / VAULT_RESERVES")
+    if not bal.empty: st.dataframe(bal, use_container_width=True, hide_index=True)
