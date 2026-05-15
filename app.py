@@ -63,21 +63,21 @@ if st.session_state.page == 'TRADE':
             entry = r1c4.number_input("ENTRY PRICE", min_value=0.0)
             
             r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-            exit_p = r2c1.number_input("EXIT PRICE (Opzionale)", min_value=0.0, value=0.0)
+            exit_p = r2c1.number_input("EXIT PRICE", min_value=0.0, value=0.0)
             open_d = r2c2.date_input("OPEN DATE", value=datetime.date.today())
-            close_d = r2c3.date_input("CLOSE DATE (Opzionale)", value=None)
+            close_d = r2c3.date_input("CLOSE DATE", value=None)
             lev = r2c4.number_input("LEVERAGE", min_value=1.0, value=1.0)
             
             if st.form_submit_button("REGISTRA POSIZIONE"):
+                # LOGICA STATO AUTOMATICA
                 status = "CHIUSA" if exit_p > 0 else "APERTA"
                 final_close_date = None
                 if exit_p > 0:
                     final_close_date = str(close_d) if close_d else str(datetime.date.today())
                 
-                # Calcolo Capitale Investito (Costo) approssimato
                 cost = round((entry * shares) / lev, 2)
-                pnl_netto = 0.0
-                pnl_perc = 0.0
+                pnl_netto, pnl_perc = 0.0, 0.0
+                
                 if exit_p > 0:
                     m = 1 if side == "LONG" else -1
                     pnl_netto = round(((exit_p - entry) * shares * m), 2)
@@ -93,8 +93,8 @@ if st.session_state.page == 'TRADE':
                 st.rerun()
 
     if not trades.empty:
-        # Arrotondamento display forzato per tutte le colonne numeriche
-        num_cols = ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost', 'leverage']
+        # Arrotondamento forzato display
+        num_cols = ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']
         for c in num_cols:
             if c in trades.columns:
                 trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
@@ -109,12 +109,12 @@ if st.session_state.page == 'TRADE':
             styles['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
             return styles
 
-        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // LIVE_MONITOR</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // AUTO_STATUS_LOGIC</div>", unsafe_allow_html=True)
         
         edited_trades = st.data_editor(
             trades.style.apply(style_ledger, axis=None), 
             use_container_width=True, hide_index=True, num_rows="dynamic",
-            disabled=["id", "cost", "profit", "pnl_perc", "status"], # Status calcolato automaticamente
+            disabled=["id", "cost", "profit", "pnl_perc", "status"], # Status disabilitato perché calcolato
             column_config={
                 "asset": st.column_config.TextColumn("TKR", width=50),
                 "side": st.column_config.TextColumn("S", width=40),
@@ -126,7 +126,7 @@ if st.session_state.page == 'TRADE':
                 "pnl_perc": st.column_config.NumberColumn("%", format="%.2f%%", width=65),
                 "status": st.column_config.TextColumn("STATO", width=80)
             },
-            key="terminal_v5"
+            key="terminal_v6"
         )
         
         if st.button("SYNC"):
@@ -136,22 +136,25 @@ if st.session_state.page == 'TRADE':
                 
                 for idx, row in edited_trades.iterrows():
                     p_in, p_out, qta = float(row['entry_price']), float(row['exit_price']), float(row['shares'])
+                    
+                    # LOGICA AUTOMATICA: Se OUT > 0 allora CHIUSA
                     nuovo_stato = "CHIUSA" if p_out > 0 else "APERTA"
                     
-                    # Ricalcolo Costo e Rendimento con approssimazione
                     capitale = round((p_in * qta) / float(row['leverage']), 2)
                     pnl_n, pnl_p = 0.0, 0.0
+                    
                     if p_out > 0:
                         m = 1 if row['side'] == "LONG" else -1
                         pnl_n = round(((p_out - p_in) * qta * m), 2)
                         pnl_p = round((pnl_n / capitale * 100), 2) if capitale > 0 else 0.0
                     
                     supabase.table("trades").update({
-                        "exit_price": round(p_out, 2), "status": nuovo_stato, "cost": capitale,
-                        "profit": pnl_n, "pnl_perc": pnl_p,
-                        "date": str(row['date']), "close_date": str(row['close_date']) if p_out > 0 else None
+                        "exit_price": round(p_out, 2), 
+                        "status": nuovo_stato, 
+                        "cost": capitale,
+                        "profit": pnl_n, 
+                        "pnl_perc": pnl_p,
+                        "close_date": str(row['close_date']) if p_out > 0 else None
                     }).eq("id", row['id']).execute()
                 st.rerun()
             except Exception as e: st.error(f"Sync Error: {e}")
-
-# --- DASHBOARD & VAULT (Invariati) ---
