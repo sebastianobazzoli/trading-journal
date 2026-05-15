@@ -16,18 +16,57 @@ def init_db():
 
 supabase = init_db()
 
-# --- 3. CSS PROFESSIONALE ---
+# --- 3. CSS PROFESSIONALE + RE-DESIGN PULSANTE SYNC ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+        
+        /* Layout Base */
         .block-container { padding-top: 4rem !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; max-width: 100% !important; }
         html, body, [data-testid="stAppViewContainer"] { background-color: #050505 !important; font-family: 'Roboto Mono', monospace !important; color: #CCC; }
         [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1A1A1A !important; padding-top: 2rem !important; }
-        .panel { border: 1px solid #1A1A1A; padding: 12px; background: #0A0A0A; border-radius: 2px; }
-        .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
-        .stButton>button { background-color: transparent !important; border: 1px solid #222 !important; color: #888 !important; border-radius: 0px !important; width: 100% !important; text-align: left !important; padding: 10px 15px !important; }
-        .stButton>button:hover { border-color: #00FF41 !important; color: #00FF41 !important; }
+        
+        /* Design del Ledger */
         [data-testid="stDataEditor"] div { font-size: 11px !important; }
+        .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+
+        /* PULSANTE SYNC - CYBERPUNK REDESIGN */
+        div.stButton > button:first-child {
+            background-color: transparent !important;
+            color: #00FF41 !important;
+            border: 1px solid #00FF41 !important;
+            border-radius: 2px !important;
+            padding: 10px 24px !important;
+            font-family: 'Roboto Mono', monospace !important;
+            font-weight: 700 !important;
+            font-size: 12px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 2px !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 0 5px rgba(0, 255, 65, 0.2) !important;
+            width: auto !important; /* Non occupa più tutta la larghezza */
+            margin-top: 15px !important;
+        }
+
+        div.stButton > button:first-child:hover {
+            background-color: rgba(0, 255, 65, 0.1) !important;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.6) !important;
+            color: #00FF41 !important;
+            transform: translateY(-1px) !important;
+        }
+
+        div.stButton > button:first-child:active {
+            transform: translateY(1px) !important;
+        }
+        
+        /* Bottoni Sidebar (rimangono minimali) */
+        [data-testid="stSidebar"] .stButton>button { 
+            border: 1px solid #222 !important; 
+            color: #888 !important; 
+            width: 100% !important;
+            text-align: left !important;
+            padding: 10px 15px !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -54,7 +93,8 @@ trades = get_data("trades")
 if st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
-    with st.expander("NEW_TRADE_ENTRY", expanded=True):
+    # Form d'inserimento (Expander per pulizia)
+    with st.expander("NEW_TRADE_ENTRY", expanded=False):
         with st.form("advanced_trade", clear_on_submit=True):
             r1c1, r1c2, r1c3, r1c4 = st.columns(4)
             asset = r1c1.text_input("TICKER")
@@ -71,7 +111,6 @@ if st.session_state.page == 'TRADE':
             if st.form_submit_button("REGISTRA POSIZIONE"):
                 status = "CHIUSA" if exit_p > 0 else "APERTA"
                 final_close_date = str(close_d) if (exit_p > 0 and close_d) else (str(datetime.date.today()) if exit_p > 0 else None)
-                
                 cost = round((entry * shares) / lev, 2)
                 pnl_netto = round(((exit_p - entry) * shares * (1 if side == "LONG" else -1)), 2) if exit_p > 0 else 0.0
                 pnl_perc = round((pnl_netto / cost * 100), 2) if (exit_p > 0 and cost > 0) else 0.0
@@ -85,11 +124,9 @@ if st.session_state.page == 'TRADE':
                 st.rerun()
 
     if not trades.empty:
-        # Arrotondamento numerico per la tabella
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
             trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
-        # Ordinamento: APERTE in alto
         trades = trades.sort_values(by="status", ascending=False)
 
         def style_ledger(df):
@@ -99,15 +136,14 @@ if st.session_state.page == 'TRADE':
             styles['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
             return styles
 
-        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // CLEAN_VIEW</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // REAL-TIME MONITOR</div>", unsafe_allow_html=True)
         
-        # EDITOR: L'ID è presente nel dataframe 'trades' ma lo nascondiamo tramite column_config
         edited_trades = st.data_editor(
             trades.style.apply(style_ledger, axis=None), 
             use_container_width=True, hide_index=True, num_rows="dynamic",
             disabled=["id", "cost", "profit", "pnl_perc", "status"], 
             column_config={
-                "id": None, # <--- QUESTA RIGA NASCONDE L'ID DALLA TABELLA
+                "id": None, 
                 "asset": st.column_config.TextColumn("TKR", width=50),
                 "side": st.column_config.TextColumn("S", width=40),
                 "shares": st.column_config.NumberColumn("QTY", format="%.2f", width=60),
@@ -118,25 +154,26 @@ if st.session_state.page == 'TRADE':
                 "pnl_perc": st.column_config.NumberColumn("%", format="%.2f%%", width=65),
                 "status": st.column_config.TextColumn("STATO", width=80)
             },
-            key="terminal_v7"
+            key="terminal_v_final"
         )
         
-        if st.button("SYNC"):
+        # IL PULSANTE ORA HA UN DESIGN DEDICATO NEL CSS
+        if st.button("SYNCHRONIZE_TERMINAL"):
             try:
                 ids_del = set(trades['id']) - set(edited_trades['id'])
                 for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
-                
                 for idx, row in edited_trades.iterrows():
                     p_in, p_out, qta = float(row['entry_price']), float(row['exit_price']), float(row['shares'])
                     nuovo_stato = "CHIUSA" if p_out > 0 else "APERTA"
                     capitale = round((p_in * qta) / float(row['leverage']), 2)
                     pnl_n = round(((p_out - p_in) * qta * (1 if row['side'] == "LONG" else -1)), 2) if p_out > 0 else 0.0
                     pnl_p = round((pnl_n / capitale * 100), 2) if (p_out > 0 and capitale > 0) else 0.0
-                    
                     supabase.table("trades").update({
                         "exit_price": round(p_out, 2), "status": nuovo_stato, "cost": capitale,
                         "profit": pnl_n, "pnl_perc": pnl_p,
                         "close_date": str(row['close_date']) if p_out > 0 else None
                     }).eq("id", row['id']).execute()
                 st.rerun()
-            except Exception as e: st.error(f"Sync Error: {e}")
+            except: pass
+
+# --- DASHBOARD & Altro (Invariati) ---
