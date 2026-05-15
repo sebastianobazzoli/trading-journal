@@ -13,7 +13,6 @@ def init_db():
     try: 
         return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     except Exception as e:
-        st.error(f"Errore connessione Supabase: {e}")
         return None
 
 supabase = init_db()
@@ -27,8 +26,6 @@ st.markdown("""
         [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1A1A1A !important; padding-top: 2rem !important; }
         .panel { border: 1px solid #1A1A1A; padding: 12px; background: #0A0A0A; border-radius: 2px; margin-bottom: 10px; }
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
-        
-        /* Bottone professionale */
         div.stButton > button {
             background-color: #0A0A0A !important; color: #888 !important; border: 1px solid #1A1A1A !important;
             border-radius: 2px !important; padding: 6px 20px !important; font-family: 'Roboto Mono', monospace !important;
@@ -64,29 +61,23 @@ with st.sidebar:
 # --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
     st.markdown("### / MONITOR_DASHBOARD")
-    
-    if not settings.empty and 'initial_balance' in settings.columns:
+    if not settings.empty and 'initial_balance' in settings.columns and 'account_name' in settings.columns:
         initial_total = pd.to_numeric(settings['initial_balance']).sum()
-        
-        # Grafico Equity
         if not trades.empty and 'status' in trades.columns:
             closed = trades[trades['status'] == 'CHIUSA'].copy()
-            if not closed.empty:
+            if not closed.empty and 'close_date' in closed.columns and closed['close_date'].notna().any():
                 closed['close_date'] = pd.to_datetime(closed['close_date'])
                 closed = closed.sort_values('close_date')
                 closed['cum_profit'] = pd.to_numeric(closed['profit']).cumsum()
                 closed['port_return'] = ((initial_total + closed['cum_profit']) / initial_total - 1) * 100
-                
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=closed['close_date'], y=closed['port_return'], name="PORTFOLIO", line=dict(color='#00FF41', width=2)))
                 fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0,r=0,t=20,b=0), xaxis=dict(gridcolor='#1A1A1A'), yaxis=dict(gridcolor='#1A1A1A'))
                 st.plotly_chart(fig, use_container_width=True)
 
-        # Card Conti Multi-Currency
         st.markdown("<div class='ticker-label'>VAULT_RESERVES // ASSET_DISTRIBUTION</div>", unsafe_allow_html=True)
         unique_accounts = settings['account_name'].unique()
         acc_cols = st.columns(len(unique_accounts))
-        
         for i, acc_name in enumerate(unique_accounts):
             acc_data = settings[settings['account_name'] == acc_name]
             with acc_cols[i]:
@@ -101,7 +92,7 @@ if st.session_state.page == 'DASHBOARD':
                     st.markdown(f"<div style='margin-bottom:8px;'><span style='color:#555; font-size:11px;'>{curr}</span><br><span style='font-size:16px; font-weight:700;'>{total:,.2f}</span><div style='font-size:9px; color:#555;'>LIQ: <span style='color:#00FF41;'>{avail:,.2f}</span></div></div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.info("Configura i saldi iniziali in SYSTEM_SETTINGS per sbloccare la Dashboard.")
+        st.info("Configura i conti in SYSTEM_SETTINGS per sbloccare la Dashboard.")
 
 # --- 6. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
@@ -121,8 +112,11 @@ elif st.session_state.page == 'TRADE':
             close_d = r2c3.date_input("CLOSE DATE", value=None)
             lev = r2c4.number_input("LEV", min_value=1.0, value=1.0)
             
-            # Selezione dinamica del conto basata sui settings
-            acc_options = settings['account_name'].unique().tolist() if not settings.empty else ["Main"]
+            # --- PROTEZIONE KEYERROR ---
+            acc_options = ["Main"]
+            if not settings.empty and 'account_name' in settings.columns:
+                acc_options = settings['account_name'].unique().tolist()
+            
             curr_options = ["USD", "EUR", "USDT", "BTC", "ETH"]
             
             r3c1, r3c2 = st.columns(2)
@@ -138,8 +132,9 @@ elif st.session_state.page == 'TRADE':
                     supabase.table("trades").insert({
                         "asset": asset, "side": side, "shares": round(shares, 2), "entry_price": round(entry, 2),
                         "exit_price": round(exit_p, 2), "status": status, "date": str(open_d),
-                        "close_date": str(close_d) if exit_p > 0 else None, "leverage": lev, "cost": cost,
-                        "profit": pnl, "pnl_perc": round(pnl/cost*100, 2) if (exit_p > 0 and cost > 0) else 0,
+                        "close_date": str(close_d) if (exit_p > 0 and close_d) else (str(datetime.date.today()) if exit_p > 0 else None), 
+                        "leverage": lev, "cost": cost, "profit": pnl, 
+                        "pnl_perc": round(pnl/cost*100, 2) if (exit_p > 0 and cost > 0) else 0,
                         "instrument": "Stock", "currency": curr_choice, "portfolio": acc_choice
                     }).execute()
                     st.rerun()
@@ -172,7 +167,7 @@ elif st.session_state.page == 'TRADE':
                 "pnl_perc": st.column_config.NumberColumn("%", format="%.2f%%", width=65),
                 "status": st.column_config.TextColumn("STATO", width=80)
             },
-            key="ledger_v_blindata"
+            key="ledger_v_final_secure"
         )
         
         if st.button("SYNCHRONIZE"):
