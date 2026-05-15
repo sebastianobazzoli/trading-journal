@@ -10,8 +10,11 @@ st.set_page_config(page_title="TERMINAL_X", layout="wide", initial_sidebar_state
 
 @st.cache_resource
 def init_db():
-    try: return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-    except: return None
+    try: 
+        return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+    except Exception as e:
+        st.error(f"Errore connessione Supabase: {e}")
+        return None
 
 supabase = init_db()
 
@@ -24,6 +27,8 @@ st.markdown("""
         [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1A1A1A !important; padding-top: 2rem !important; }
         .panel { border: 1px solid #1A1A1A; padding: 12px; background: #0A0A0A; border-radius: 2px; margin-bottom: 10px; }
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        
+        /* Bottone professionale */
         div.stButton > button {
             background-color: #0A0A0A !important; color: #888 !important; border: 1px solid #1A1A1A !important;
             border-radius: 2px !important; padding: 6px 20px !important; font-family: 'Roboto Mono', monospace !important;
@@ -36,10 +41,12 @@ st.markdown("""
 
 # --- 3. FUNZIONI DATI ---
 def get_data(table):
+    if not supabase: return pd.DataFrame()
     try:
         res = supabase.table(table).select("*").execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-    except: return pd.DataFrame()
+    except:
+        return pd.DataFrame()
 
 trades = get_data("trades")
 settings = get_data("balances")
@@ -61,8 +68,8 @@ if st.session_state.page == 'DASHBOARD':
     if not settings.empty and 'initial_balance' in settings.columns:
         initial_total = pd.to_numeric(settings['initial_balance']).sum()
         
-        # Grafico Equity vs Benchmark
-        if not trades.empty:
+        # Grafico Equity
+        if not trades.empty and 'status' in trades.columns:
             closed = trades[trades['status'] == 'CHIUSA'].copy()
             if not closed.empty:
                 closed['close_date'] = pd.to_datetime(closed['close_date'])
@@ -94,9 +101,9 @@ if st.session_state.page == 'DASHBOARD':
                     st.markdown(f"<div style='margin-bottom:8px;'><span style='color:#555; font-size:11px;'>{curr}</span><br><span style='font-size:16px; font-weight:700;'>{total:,.2f}</span><div style='font-size:9px; color:#555;'>LIQ: <span style='color:#00FF41;'>{avail:,.2f}</span></div></div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.info("Inizializza i conti e i saldi in SYSTEM_SETTINGS per attivare il monitoraggio.")
+        st.info("Configura i saldi iniziali in SYSTEM_SETTINGS per sbloccare la Dashboard.")
 
-# --- 6. PAGINA: TRADE EXECUTION (RIPRISTINATA INTEGRALMENTE) ---
+# --- 6. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
@@ -105,41 +112,51 @@ elif st.session_state.page == 'TRADE':
             r1c1, r1c2, r1c3, r1c4 = st.columns(4)
             asset = r1c1.text_input("TICKER")
             side = r1c2.selectbox("SIDE", ["LONG", "SHORT"])
-            shares = r1c3.number_input("QUANTITÀ", min_value=0.0, step=0.01)
-            entry = r1c4.number_input("ENTRY PRICE", min_value=0.0)
-            r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-            exit_p = r2c1.number_input("EXIT PRICE", min_value=0.0, value=0.0)
-            open_d = r2c2.date_input("OPEN DATE", value=datetime.date.today())
-            close_d = r2c3.date_input("CLOSE DATE", value=None)
-            lev = r2c4.number_input("LEVERAGE", min_value=1.0, value=1.0)
+            shares = r1c3.number_input("QTY", min_value=0.0, step=0.01)
+            entry = r1c4.number_input("IN PRICE", min_value=0.0)
             
+            r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+            exit_p = r2c1.number_input("OUT PRICE", min_value=0.0, value=0.0)
+            open_d = r2c2.date_input("OPEN DATE")
+            close_d = r2c3.date_input("CLOSE DATE", value=None)
+            lev = r2c4.number_input("LEV", min_value=1.0, value=1.0)
+            
+            # Selezione dinamica del conto basata sui settings
+            acc_options = settings['account_name'].unique().tolist() if not settings.empty else ["Main"]
+            curr_options = ["USD", "EUR", "USDT", "BTC", "ETH"]
+            
+            r3c1, r3c2 = st.columns(2)
+            acc_choice = r3c1.selectbox("ACCOUNT", acc_options)
+            curr_choice = r3c2.selectbox("CURRENCY", curr_options)
+
             if st.form_submit_button("REGISTRA POSIZIONE"):
                 status = "CHIUSA" if exit_p > 0 else "APERTA"
-                final_close_date = str(close_d) if (exit_p > 0 and close_d) else (str(datetime.date.today()) if exit_p > 0 else None)
                 cost = round((entry * shares) / lev, 2)
-                pnl_netto = round(((exit_p - entry) * shares * (1 if side == "LONG" else -1)), 2) if exit_p > 0 else 0.0
-                pnl_perc = round((pnl_netto / cost * 100), 2) if (exit_p > 0 and cost > 0) else 0.0
-                supabase.table("trades").insert({
-                    "asset": asset, "side": side, "shares": round(shares, 2), "entry_price": round(entry, 2),
-                    "exit_price": round(exit_p, 2), "status": status, "date": str(open_d),
-                    "close_date": final_close_date, "leverage": lev, "cost": cost,
-                    "profit": pnl_netto, "pnl_perc": pnl_perc, "instrument": "Stock", "currency": "USD", "portfolio": "Main"
-                }).execute()
-                st.rerun()
+                pnl = round(((exit_p - entry) * shares * (1 if side == "LONG" else -1)), 2) if exit_p > 0 else 0.0
+                
+                try:
+                    supabase.table("trades").insert({
+                        "asset": asset, "side": side, "shares": round(shares, 2), "entry_price": round(entry, 2),
+                        "exit_price": round(exit_p, 2), "status": status, "date": str(open_d),
+                        "close_date": str(close_d) if exit_p > 0 else None, "leverage": lev, "cost": cost,
+                        "profit": pnl, "pnl_perc": round(pnl/cost*100, 2) if (exit_p > 0 and cost > 0) else 0,
+                        "instrument": "Stock", "currency": curr_choice, "portfolio": acc_choice
+                    }).execute()
+                    st.rerun()
+                except Exception as e: st.error(f"Errore inserimento: {e}")
 
     if not trades.empty:
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
             trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
-        trades = trades.sort_values(by="status", ascending=False)
-
+        
         def style_ledger(df):
-            styles = pd.DataFrame('', index=df.index, columns=df.columns)
-            styles['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF' if float(x) > 0 else '')
-            styles['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
-            styles['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
-            return styles
+            s = pd.DataFrame('', index=df.index, columns=df.columns)
+            s['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF' if float(x) > 0 else '')
+            s['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
+            s['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
+            return s
 
-        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // CLEAN_VIEW</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // REGISTERED_TRADES</div>", unsafe_allow_html=True)
         edited_trades = st.data_editor(
             trades.style.apply(style_ledger, axis=None), 
             use_container_width=True, hide_index=True, num_rows="dynamic",
@@ -150,43 +167,42 @@ elif st.session_state.page == 'TRADE':
                 "shares": st.column_config.NumberColumn("QTY", format="%.2f", width=60),
                 "entry_price": st.column_config.NumberColumn("IN", format="%.2f", width=65),
                 "exit_price": st.column_config.NumberColumn("OUT", format="%.2f", width=65),
-                "cost": st.column_config.NumberColumn("COSTO", format="%.2f", width=75),
+                "cost": st.column_config.NumberColumn("COST", format="%.2f", width=75),
                 "profit": st.column_config.NumberColumn("P&L", format="%.2f", width=75),
                 "pnl_perc": st.column_config.NumberColumn("%", format="%.2f%%", width=65),
                 "status": st.column_config.TextColumn("STATO", width=80)
             },
-            key="ledger_v_final"
+            key="ledger_v_blindata"
         )
+        
         if st.button("SYNCHRONIZE"):
             try:
                 ids_del = set(trades['id']) - set(edited_trades['id'])
                 for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
                 for idx, row in edited_trades.iterrows():
                     p_in, p_out, qta = float(row['entry_price']), float(row['exit_price']), float(row['shares'])
-                    nuovo_stato = "CHIUSA" if p_out > 0 else "APERTA"
-                    capitale = round((p_in * qta) / float(row['leverage']), 2)
-                    pnl_n = round(((p_out - p_in) * qta * (1 if row['side'] == "LONG" else -1)), 2) if p_out > 0 else 0.0
-                    pnl_p = round((pnl_n / capitale * 100), 2) if (p_out > 0 and capitale > 0) else 0.0
+                    c = round((p_in * qta) / float(row['leverage']), 2)
+                    pnl = round(((p_out - p_in) * qta * (1 if row['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
                     supabase.table("trades").update({
-                        "exit_price": round(p_out, 2), "status": nuovo_stato, "cost": capitale,
-                        "profit": pnl_n, "pnl_perc": pnl_p,
-                        "close_date": str(row['close_date']) if p_out > 0 else None
+                        "exit_price": round(p_out, 2), "status": "CHIUSA" if p_out > 0 else "APERTA", 
+                        "cost": c, "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0
                     }).eq("id", row['id']).execute()
                 st.rerun()
-            except: pass
+            except Exception as e: st.error(f"Errore sincronizzazione: {e}")
 
 # --- 7. PAGINA: SETTINGS ---
 elif st.session_state.page == 'SETTINGS':
     st.markdown("### / SYSTEM_SETTINGS")
-    with st.form("set_multi_balance"):
+    with st.form("set_balance"):
         c1, c2, c3 = st.columns(3)
-        n = c1.text_input("NOME CONTO (es. Binance)")
-        curr = c2.selectbox("VALUTA", ["USD", "EUR", "BTC", "USDT", "ETH"])
-        bal_val = c3.number_input("SALDO INIZIALE", min_value=0.0)
-        if st.form_submit_button("AGGIUNGI VALUTA AL CONTO"):
-            if n:
+        n, curr, bal_val = c1.text_input("CONTO"), c2.selectbox("VALUTA", ["USD", "EUR", "BTC", "USDT", "ETH"]), c3.number_input("SALDO INIZIALE", min_value=0.0)
+        if st.form_submit_button("AGGIUNGI VALUTA"):
+            try:
                 supabase.table("balances").insert({"account_name": n, "currency": curr, "initial_balance": bal_val}).execute()
+                st.success(f"Conto {n} inizializzato.")
                 st.rerun()
+            except Exception as e: st.error(f"Errore DB: {e}")
+            
     if not settings.empty:
         st.markdown("---")
-        st.data_editor(settings, use_container_width=True, hide_index=True, key="sett_edit_final")
+        st.data_editor(settings, use_container_width=True, hide_index=True)
