@@ -17,51 +17,17 @@ def init_db():
 
 supabase = init_db()
 
-# --- 3. CSS PROFESSIONALE (CORREZIONE SOVRAPPOSIZIONE) ---
+# --- 3. CSS PROFESSIONALE ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
-        
-        /* 1. Spostamento contenuto principale sotto l'header di Streamlit */
-        .block-container { 
-            padding-top: 4rem !important; 
-            padding-left: 2rem !important; 
-            padding-right: 2rem !important; 
-            max-width: 100% !important;
-        }
-
-        /* 2. Sfondo e font globale */
-        html, body, [data-testid="stAppViewContainer"] { 
-            background-color: #050505 !important; 
-            font-family: 'Roboto Mono', monospace !important; 
-            color: #CCC; 
-        }
-
-        /* 3. Sidebar distanziata e stilizzata */
-        [data-testid="stSidebar"] { 
-            background-color: #080808 !important; 
-            border-right: 1px solid #1A1A1A !important;
-            padding-top: 2rem !important;
-        }
-
-        /* 4. Pannelli e Ticker */
+        .block-container { padding-top: 4rem !important; padding-left: 2rem !important; padding-right: 2rem !important; max-width: 100% !important; }
+        html, body, [data-testid="stAppViewContainer"] { background-color: #050505 !important; font-family: 'Roboto Mono', monospace !important; color: #CCC; }
+        [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1A1A1A !important; padding-top: 2rem !important; }
         .panel { border: 1px solid #1A1A1A; padding: 12px; background: #0A0A0A; border-radius: 2px; }
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
-
-        /* 5. Bottoni Sidebar */
-        .stButton>button { 
-            background-color: transparent !important; 
-            border: 1px solid #222 !important; 
-            color: #888 !important; 
-            border-radius: 0px !important; 
-            width: 100% !important;
-            text-align: left !important;
-            padding: 10px 15px !important;
-            margin-bottom: 5px;
-        }
+        .stButton>button { background-color: transparent !important; border: 1px solid #222 !important; color: #888 !important; border-radius: 0px !important; width: 100% !important; text-align: left !important; padding: 10px 15px !important; margin-bottom: 5px; }
         .stButton>button:hover { border-color: #00FF41 !important; color: #00FF41 !important; }
-
-        /* 6. Ottimizzazione Tabella per evitare scroll orizzontale */
         [data-testid="stDataEditor"] div { font-size: 11px !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -86,7 +52,7 @@ with st.sidebar:
 trades = get_data("trades")
 bal = get_data("balances")
 
-# --- 6. PAGINA: DASHBOARD ---
+# --- 6. DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
     st.markdown("### / MONITOR_DASHBOARD")
     market_tickers = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "BTC/USD": "BTC-USD", "GOLD": "GC=F"}
@@ -111,12 +77,36 @@ if st.session_state.page == 'DASHBOARD':
             fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0,r=0,t=10,b=0), xaxis=dict(gridcolor='#1A1A1A'), yaxis=dict(gridcolor='#1A1A1A'))
             st.plotly_chart(fig, use_container_width=True)
 
-# --- 7. PAGINA: TRADE EXECUTION (FULL-WIDTH & ROUNDED) ---
+# --- 7. TRADE EXECUTION (FORM RIPRISTINATO) ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
+    # --- NUOVO FORM DI INSERIMENTO COMPATTO ---
+    with st.expander("NEW_TRADE_ENTRY", expanded=True):
+        with st.form("quick_trade", clear_on_submit=True):
+            f1, f2, f3, f4, f5, f6 = st.columns([1, 1, 1, 1, 1, 1])
+            asset = f1.text_input("TICKER")
+            side = f2.selectbox("SIDE", ["LONG", "SHORT"])
+            shares = f3.number_input("QTY", min_value=0.0, step=0.1)
+            entry = f4.number_input("ENTRY PMC", min_value=0.0)
+            lev = f5.number_input("LEV", min_value=1.0, value=1.0)
+            fees = f6.number_input("FEE", min_value=0.0)
+            
+            submit = st.form_submit_button("EXECUTE_ORDER")
+            if submit and asset:
+                # Calcolo costo (margine) arrotondato
+                cost = round(((entry * shares) / lev) + fees, 2)
+                supabase.table("trades").insert({
+                    "asset": asset, "side": side, "shares": round(shares, 2), 
+                    "entry_price": round(entry, 2), "leverage": lev, "fees": round(fees, 2), 
+                    "cost": cost, "status": "OPEN", "date": str(datetime.date.today()),
+                    "instrument": "Stock", "currency": "USD", "portfolio": "Main",
+                    "profit": 0, "pnl_perc": 0, "exit_price": 0
+                }).execute()
+                st.rerun()
+
     if not trades.empty:
-        # Arrotondamento forzato alla seconda cifra decimale
+        # Pulizia dati per visualizzazione
         cols_round = ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'fees', 'cost', 'leverage']
         for c in cols_round:
             if c in trades.columns:
@@ -128,14 +118,11 @@ elif st.session_state.page == 'TRADE':
             styles['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
             return styles
 
-        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // NO_SCROLL_MODE</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // FULL_VISIBILITY</div>", unsafe_allow_html=True)
         
-        # TABELLA OTTIMIZZATA PER LARGHEZZA TOTALE
         edited_trades = st.data_editor(
             trades.style.apply(color_ledger, axis=None), 
-            use_container_width=True, 
-            hide_index=True, 
-            num_rows="dynamic",
+            use_container_width=True, hide_index=True, num_rows="dynamic",
             disabled=["id", "cost", "notional", "date", "profit", "pnl_perc"], 
             column_config={
                 "asset": st.column_config.TextColumn("TKR", width=50),
@@ -150,30 +137,22 @@ elif st.session_state.page == 'TRADE':
                 "fees": st.column_config.NumberColumn("FEE", format="%.2f", width=55),
                 "leverage": st.column_config.NumberColumn("LV", format="x%d", width=45)
             },
-            key="terminal_editor_final"
+            key="terminal_editor_v3"
         )
         
         if st.button("SYNC_AND_CALC"):
             try:
                 ids_orig = set(trades['id']); ids_new = set(edited_trades['id']); ids_del = ids_orig - ids_new
                 for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
-                
                 for idx, row in edited_trades.iterrows():
                     p_in, p_out, qta = float(row['entry_price']), float(row['exit_price']), float(row['shares'])
                     comm, margine = float(row['fees']), float(row['cost'])
                     pnl_netto, pnl_perc = 0.0, 0.0
-                    
                     if p_out > 0:
                         side_m = 1 if row['side'] == "LONG" else -1
                         pnl_netto = ((p_out - p_in) * qta * side_m) - comm
                         if margine > 0: pnl_perc = (pnl_netto / margine) * 100
-                    
-                    supabase.table("trades").update({
-                        "status": row['status'], 
-                        "exit_price": round(p_out, 2), 
-                        "profit": round(pnl_netto, 2), 
-                        "pnl_perc": round(pnl_perc, 2)
-                    }).eq("id", row['id']).execute()
+                    supabase.table("trades").update({"status": row['status'], "exit_price": round(p_out, 2), "profit": round(pnl_netto, 2), "pnl_perc": round(pnl_perc, 2)}).eq("id", row['id']).execute()
                 st.rerun()
             except: pass
 
