@@ -69,35 +69,25 @@ if st.session_state.page == 'TRADE':
             lev = r2c4.number_input("LEVERAGE", min_value=1.0, value=1.0)
             
             if st.form_submit_button("REGISTRA POSIZIONE"):
-                # LOGICA STATO AUTOMATICA
                 status = "CHIUSA" if exit_p > 0 else "APERTA"
-                final_close_date = None
-                if exit_p > 0:
-                    final_close_date = str(close_d) if close_d else str(datetime.date.today())
+                final_close_date = str(close_d) if (exit_p > 0 and close_d) else (str(datetime.date.today()) if exit_p > 0 else None)
                 
                 cost = round((entry * shares) / lev, 2)
-                pnl_netto, pnl_perc = 0.0, 0.0
-                
-                if exit_p > 0:
-                    m = 1 if side == "LONG" else -1
-                    pnl_netto = round(((exit_p - entry) * shares * m), 2)
-                    pnl_perc = round((pnl_netto / cost * 100), 2) if cost > 0 else 0.0
+                pnl_netto = round(((exit_p - entry) * shares * (1 if side == "LONG" else -1)), 2) if exit_p > 0 else 0.0
+                pnl_perc = round((pnl_netto / cost * 100), 2) if (exit_p > 0 and cost > 0) else 0.0
                 
                 supabase.table("trades").insert({
                     "asset": asset, "side": side, "shares": round(shares, 2), "entry_price": round(entry, 2),
                     "exit_price": round(exit_p, 2), "status": status, "date": str(open_d),
                     "close_date": final_close_date, "leverage": lev, "cost": cost,
-                    "profit": pnl_netto, "pnl_perc": pnl_perc,
-                    "instrument": "Stock", "currency": "USD"
+                    "profit": pnl_netto, "pnl_perc": pnl_perc, "instrument": "Stock", "currency": "USD"
                 }).execute()
                 st.rerun()
 
     if not trades.empty:
-        # Arrotondamento forzato display
-        num_cols = ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']
-        for c in num_cols:
-            if c in trades.columns:
-                trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
+        # Arrotondamento numerico per la tabella
+        for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
+            trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
         # Ordinamento: APERTE in alto
         trades = trades.sort_values(by="status", ascending=False)
@@ -109,13 +99,15 @@ if st.session_state.page == 'TRADE':
             styles['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
             return styles
 
-        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // AUTO_STATUS_LOGIC</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>LEDGER_SYSTEM // CLEAN_VIEW</div>", unsafe_allow_html=True)
         
+        # EDITOR: L'ID è presente nel dataframe 'trades' ma lo nascondiamo tramite column_config
         edited_trades = st.data_editor(
             trades.style.apply(style_ledger, axis=None), 
             use_container_width=True, hide_index=True, num_rows="dynamic",
-            disabled=["id", "cost", "profit", "pnl_perc", "status"], # Status disabilitato perché calcolato
+            disabled=["id", "cost", "profit", "pnl_perc", "status"], 
             column_config={
+                "id": None, # <--- QUESTA RIGA NASCONDE L'ID DALLA TABELLA
                 "asset": st.column_config.TextColumn("TKR", width=50),
                 "side": st.column_config.TextColumn("S", width=40),
                 "shares": st.column_config.NumberColumn("QTY", format="%.2f", width=60),
@@ -126,7 +118,7 @@ if st.session_state.page == 'TRADE':
                 "pnl_perc": st.column_config.NumberColumn("%", format="%.2f%%", width=65),
                 "status": st.column_config.TextColumn("STATO", width=80)
             },
-            key="terminal_v6"
+            key="terminal_v7"
         )
         
         if st.button("SYNC"):
@@ -136,24 +128,14 @@ if st.session_state.page == 'TRADE':
                 
                 for idx, row in edited_trades.iterrows():
                     p_in, p_out, qta = float(row['entry_price']), float(row['exit_price']), float(row['shares'])
-                    
-                    # LOGICA AUTOMATICA: Se OUT > 0 allora CHIUSA
                     nuovo_stato = "CHIUSA" if p_out > 0 else "APERTA"
-                    
                     capitale = round((p_in * qta) / float(row['leverage']), 2)
-                    pnl_n, pnl_p = 0.0, 0.0
-                    
-                    if p_out > 0:
-                        m = 1 if row['side'] == "LONG" else -1
-                        pnl_n = round(((p_out - p_in) * qta * m), 2)
-                        pnl_p = round((pnl_n / capitale * 100), 2) if capitale > 0 else 0.0
+                    pnl_n = round(((p_out - p_in) * qta * (1 if row['side'] == "LONG" else -1)), 2) if p_out > 0 else 0.0
+                    pnl_p = round((pnl_n / capitale * 100), 2) if (p_out > 0 and capitale > 0) else 0.0
                     
                     supabase.table("trades").update({
-                        "exit_price": round(p_out, 2), 
-                        "status": nuovo_stato, 
-                        "cost": capitale,
-                        "profit": pnl_n, 
-                        "pnl_perc": pnl_p,
+                        "exit_price": round(p_out, 2), "status": nuovo_stato, "cost": capitale,
+                        "profit": pnl_n, "pnl_perc": pnl_p,
                         "close_date": str(row['close_date']) if p_out > 0 else None
                     }).eq("id", row['id']).execute()
                 st.rerun()
