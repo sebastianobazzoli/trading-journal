@@ -32,7 +32,7 @@ st.markdown("""
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 2px; margin-bottom: 10px; }
         .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; }
         
-        /* Pulsanti Laterali con Testo Giallo Istituzionale */
+        /* Pulsanti Laterali */
         div.stButton > button {
             background-color: #111111 !important; color: #FFD700 !important; border: 1px solid #333333 !important;
             border-radius: 0px !important; padding: 4px 14px !important; font-family: 'Roboto Mono', monospace !important;
@@ -200,7 +200,7 @@ elif st.session_state.page == 'TRADE':
                 }).eq("id", int(r['id'])).execute()
             st.rerun()
 
-# --- 7. PAGINA: PERFORMANCE HEATMAP ---
+# --- 7. PAGINA: PERFORMANCE HEATMAP (ADAPTIVE SYSTEM PATCH) ---
 elif st.session_state.page == 'HEATMAP':
     st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_PERFORMANCE_HEATMAP</h2>", unsafe_allow_html=True)
     if not trades.empty:
@@ -217,7 +217,8 @@ elif st.session_state.page == 'HEATMAP':
             months_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
             all_days = list(range(1, 32))
 
-            st.markdown("<div class='ticker-label'>DAILY_OPERATIONAL_MATRIX // GRID_SYSTEM</div>", unsafe_allow_html=True)
+            # --- Matrice 1: Giornaliera (Adattiva e Dominante) ---
+            st.markdown("<div class='ticker-label'>DAILY_OPERATIONAL_MATRIX // FULL YEAR ACCUMULATED PROFILE</div>", unsafe_allow_html=True)
             current_year = datetime.date.today().year
             daily_df = time_df[time_df['year'] == current_year]
             daily_agg = daily_df.groupby(['month_name', 'day']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
@@ -226,12 +227,19 @@ elif st.session_state.page == 'HEATMAP':
             pivot_assets = daily_agg.pivot(index='month_name', columns='day', values='assets_list').reindex(index=months_order, columns=all_days).fillna("None")
 
             fig_daily = go.Figure(data=go.Heatmap(z=pivot_daily.values, x=pivot_daily.columns, y=pivot_daily.index, colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>MESE:</b> %{y}<br><b>GIORNO:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_trades.values, pivot_assets.values))))
-            fig_daily.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#D5D5D5", size=10), height=280, margin=dict(l=50, r=10, t=10, b=30))
+            
+            # FIX ADATTIVO GIORNALIERA: Rimosso height fisso, usiamo l'aspect ratio (widescreen disteso)
+            fig_daily.update_layout(
+                autosize=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                font=dict(family="Roboto Mono", color="#D5D5D5", size=10), 
+                margin=dict(l=50, r=10, t=10, b=30)
+            )
             fig_daily.update_xaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             fig_daily.update_yaxes(gridcolor='#222222')
             st.plotly_chart(fig_daily, use_container_width=True)
 
-            st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY HISTORICAL SUMMARY</div>", unsafe_allow_html=True)
+            # --- Matrice 2: Annuale (Adattiva e Più Piccola) ---
+            st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY COMPACT HISTORICAL SUMMARY</div>", unsafe_allow_html=True)
             yearly_agg = time_df.groupby(['year', 'month_name']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
             unique_years = sorted(time_df['year'].unique())
             pivot_yearly = yearly_agg.pivot(index='year', columns='month_name', values='pnl_totale').reindex(index=unique_years, columns=months_order).fillna(0.0)
@@ -239,7 +247,13 @@ elif st.session_state.page == 'HEATMAP':
             pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(index=unique_years, columns=months_order).fillna("None")
 
             fig_yearly = go.Figure(data=go.Heatmap(z=pivot_yearly.values, x=pivot_yearly.columns, y=pivot_yearly.index, colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))))
-            fig_yearly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#D5D5D5", size=10), height=180, margin=dict(l=50, r=10, t=10, b=30))
+            
+            # FIX ADATTIVO MENSILE: Profilo ad altezza ridotta per mantenere la proporzione gerarchica più compatta
+            fig_yearly.update_layout(
+                autosize=True, height=180, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                font=dict(family="Roboto Mono", color="#D5D5D5", size=10), 
+                margin=dict(l=50, r=10, t=10, b=30)
+            )
             fig_yearly.update_xaxes(gridcolor='#222222')
             fig_yearly.update_yaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             st.plotly_chart(fig_yearly, use_container_width=True)
