@@ -18,18 +18,15 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS FLOWAY CORE INTERFACE (GOOGLE FORCED TERMINAL FONT) ---
+# --- 2. CSS FLOWAY CORE INTERFACE (CLEAN MONOSPACE STANDARDS) ---
 st.markdown("""
     <style>
-        /* Importazione forzata da internet per renderlo identico su Windows, Mac e Mobile */
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-        
-        /* Layout & Sfondi Nativi Terminale */
+        /* Layout & Sfondi Nativi Terminale - Spaziatura Rigida e Leggibile */
         .block-container { padding-top: 2rem !important; padding-left: 1rem !important; padding-right: 1rem !important; max-width: 100% !important; }
         
         html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] { 
             background-color: #000000 !important; 
-            font-family: 'Share Tech Mono', monospace !important; 
+            font-family: 'Consolas', 'Monaco', 'Roboto Mono', 'Courier New', monospace !important; 
             color: #D5D5D5; 
         }
         
@@ -37,13 +34,13 @@ st.markdown("""
         
         /* Pannelli Stile Floway */
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 0px; margin-bottom: 10px; }
-        .ticker-label { color: #FFD700; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Share Tech Mono', monospace !important; }
+        .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         
         /* Pulsanti Laterali Giallo Terminale */
         div.stButton > button {
             background-color: #111111 !important; color: #FFD700 !important; border: 1px solid #333333 !important;
-            border-radius: 0px !important; padding: 4px 14px !important; font-family: 'Share Tech Mono', monospace !important;
-            font-size: 12px !important; text-transform: uppercase !important; font-weight: bold; width: 100%; text-align: left;
+            border-radius: 0px !important; padding: 4px 14px !important; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important;
+            font-size: 11px !important; text-transform: uppercase !important; font-weight: bold; width: 100%; text-align: left;
             transition: all 0.15s ease-in-out !important;
         }
         div.stButton > button:hover { 
@@ -54,12 +51,12 @@ st.markdown("""
         }
         
         /* Monitor Panel Card */
-        .card-title { color: #FFD700; font-weight: 700; font-size: 14px; margin-bottom: 8px; border-bottom: 1px solid #222222; padding-bottom: 4px; text-transform: uppercase; font-family: 'Share Tech Mono', monospace !important; }
-        .stat-val { font-size: 22px; font-weight: 700; color: #FFFFFF; font-family: 'Share Tech Mono', monospace !important; }
-        .stat-sub { font-size: 10px; color: #666666; text-transform: uppercase; font-weight: bold; font-family: 'Share Tech Mono', monospace !important; }
+        .card-title { color: #FFD700; font-weight: 700; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #222222; padding-bottom: 4px; text-transform: uppercase; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
+        .stat-val { font-size: 20px; font-weight: 700; color: #FFFFFF; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
+        .stat-sub { font-size: 9px; color: #666666; text-transform: uppercase; font-weight: bold; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         
-        /* Forza l'allineamento dei caratteri all'interno del data editor di Streamlit */
-        div[data-testid="stDataEditor"] * { font-family: 'Share Tech Mono', monospace !important; }
+        /* Allineamento dei caratteri all'interno del data editor di Streamlit */
+        div[data-testid="stDataEditor"] * { font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         div[data-testid="stDataEditor"] { background-color: #050505 !important; border: 1px solid #222222 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -80,7 +77,7 @@ if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
 with st.sidebar:
-    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:20px; padding-left:10px; letter-spacing:1px; font-family:\'Share Tech Mono\', monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:20px; padding-left:10px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
     st.button("<GO> 1 . DASHBOARD", on_click=set_page, args=('DASHBOARD',))
     st.button("<GO> 2 . BLOTTER", on_click=set_page, args=('BLOTTER',))
     st.button("<GO> 3 . CALENDAR", on_click=set_page, args=('CALENDAR',))
@@ -88,7 +85,7 @@ with st.sidebar:
 
 # --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
-    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:\'Share Tech Mono\', monospace;'>/ DASHBOARD</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ DASHBOARD</h2>", unsafe_allow_html=True)
     if not balances.empty:
         st.markdown("<div class='ticker-label'>GLOBAL_LIQUIDITY_RESERVES (AGGREGATED BY CURRENCY)</div>", unsafe_allow_html=True)
         global_curr = balances['currency'].unique()
@@ -120,7 +117,7 @@ if st.session_state.page == 'DASHBOARD':
 
 # --- 6. PAGINA: BLOTTER ---
 elif st.session_state.page == 'BLOTTER':
-    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:\'Share Tech Mono\', monospace;'>/ TRADING_BLOTTER</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ TRADING_BLOTTER</h2>", unsafe_allow_html=True)
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
 
     with st.expander("[NEW_ORDER_TICKET]", expanded=False):
@@ -211,7 +208,7 @@ elif st.session_state.page == 'BLOTTER':
 
 # --- 7. PAGINA: CALENDAR ---
 elif st.session_state.page == 'CALENDAR':
-    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:\'Share Tech Mono\', monospace;'>/ PERFORMANCE_CALENDAR</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ PERFORMANCE_CALENDAR</h2>", unsafe_allow_html=True)
     if not trades.empty:
         time_df = trades[(trades['status'] == 'CHIUSA') & (trades['close_date'].notna())].copy()
         if not time_df.empty:
@@ -242,7 +239,7 @@ elif st.session_state.page == 'CALENDAR':
                 customdata=list(zip(pivot_trades.values, pivot_assets.values))
             ))
             
-            fig_daily.update_layout(autosize=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="'Share Tech Mono', monospace", color="#D5D5D5", size=11), margin=dict(l=50, r=10, t=10, b=30))
+            fig_daily.update_layout(autosize=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Consolas, Monaco, Roboto Mono, monospace", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
             fig_daily.update_xaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             fig_daily.update_yaxes(gridcolor='#222222')
             st.plotly_chart(fig_daily, use_container_width=True)
@@ -255,7 +252,7 @@ elif st.session_state.page == 'CALENDAR':
             pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(index=unique_years, columns=months_order).fillna("None")
 
             fig_yearly = go.Figure(data=go.Heatmap(z=pivot_yearly.values, x=pivot_yearly.columns, y=pivot_yearly.index, colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))))
-            fig_yearly.update_layout(autosize=True, height=180, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="'Share Tech Mono', monospace", color="#D5D5D5", size=11), margin=dict(l=50, r=10, t=10, b=30))
+            fig_yearly.update_layout(autosize=True, height=180, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Consolas, Monaco, Roboto Mono, monospace", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
             fig_yearly.update_xaxes(gridcolor='#222222')
             fig_yearly.update_yaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             st.plotly_chart(fig_yearly, use_container_width=True)
@@ -263,7 +260,7 @@ elif st.session_state.page == 'CALENDAR':
 
 # --- 8. PAGINA: VAULTS ---
 elif st.session_state.page == 'VAULTS':
-    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:\'Share Tech Mono\', monospace;'>/ VAULTS_MANAGEMENT</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ VAULTS_MANAGEMENT</h2>", unsafe_allow_html=True)
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
@@ -295,9 +292,9 @@ elif st.session_state.page == 'VAULTS':
                     st.markdown(f"""
                         <div class='panel'>
                             <div class='card-title'>{acc.upper()} // <span style='color:#666;'>{curr}</span></div>
-                            <div class='total-label' style='font-size:10px; color:#666; text-transform:uppercase; font-weight:bold;'>Total Equity Balance</div>
+                            <div class='total-label' style='font-size:9px; color:#666; text-transform:uppercase; font-weight:bold;'>Total Equity Balance</div>
                             <div class='stat-val'>{total_bal:,.2f}</div>
-                            <div class='stat-sub' style='margin-top:10px;'>Free Cash Liquidity: <span style='color:#FFFF00;'>{liq:xA,.2f}</span></div>
+                            <div class='stat-sub' style='margin-top:10px;'>Free Cash Liquidity: <span style='color:#FFFF00;'>{liq:,.2f}</span></div>
                         </div>
                     """, unsafe_allow_html=True)
                 
