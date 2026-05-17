@@ -18,10 +18,10 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS FLOWAY PURE TYPOGRAPHY INTERFACE ---
+# --- 2. CSS FLOWAY NATIVE MINIMAL INTERFACE ---
 st.markdown("""
     <style>
-        /* Layout & Sfondi Nativi Terminale - Spaziatura Rigida */
+        /* Sfondi e Tipografia Istituzionale Monospazio */
         .block-container { padding-top: 2rem !important; padding-left: 1rem !important; padding-right: 1rem !important; max-width: 100% !important; }
         
         html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] { 
@@ -32,60 +32,48 @@ st.markdown("""
         
         [data-testid="stSidebar"] { background-color: #0A0A0A !important; border-right: 2px solid #222222 !important; padding-top: 1rem !important; }
         
-        /* Pannelli Stile Floway */
-        .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 0px; margin-bottom: 10px; }
-        .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
+        /* STILIZZAZIONE DEL MENU LATERALE NATIVO (RIMOZIONE QUADRATI E ICONE) */
+        /* Nasconde le icone di default delle pagine per lasciare solo il testo */
+        [data-testid="stSidebarNavPages"] ul li div pre, 
+        [data-testid="stSidebarNavPages"] ul li div span svg { 
+            display: none !important; 
+        }
         
-        /* RIMOZIONE COMPLETA DEI QUADRATI: SOLO SCRITTE NUDE E PURE */
-        .nav-item {
-            display: block;
-            width: 100%;
-            height: 38px;
-            line-height: 38px;
-            padding-left: 15px;
-            background: transparent !important; /* Rimosso sfondo di selezione */
-            color: #666666;
-            font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace;
-            font-size: 12px;
-            font-weight: bold;
-            text-decoration: none;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin-bottom: 2px;
-            cursor: pointer;
+        /* Struttura delle scritte nude del menu */
+        [data-testid="stSidebarNavPageLink"] {
+            background: transparent !important;
+            padding: 6px 15px !important;
+            margin-bottom: 2px !important;
+            border-radius: 0px !important;
+        }
+        
+        /* Testo inattivo della navigazione nativa */
+        [data-testid="stSidebarNavPageLink"] span {
+            color: #666666 !important;
+            font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important;
+            font-size: 12px !important;
+            font-weight: bold !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1.5px !important;
             transition: color 0.1s ease-in-out !important;
         }
-        .nav-item:hover {
-            color: #FFFF00 !important; /* Accensione testo all'hover */
+        
+        /* Effetto Hover sul testo */
+        [data-testid="stSidebarNavPageLink"]:hover span {
+            color: #FFFF00 !important;
         }
         
-        /* STATO ATTIVO: Solo il testo diventa Giallo Bloomberg, nessun quadrato */
-        .nav-active {
+        /* STATO ATTIVO NATIVO: Solo la scritta vira sul Giallo Bloomberg, nessun blocco o quadrato di sfondo */
+        [data-testid="stSidebarNavPageLink"][data-selected="true"] {
+            background: transparent !important;
+        }
+        [data-testid="stSidebarNavPageLink"][data-selected="true"] span {
             color: #FFD700 !important;
-            font-weight: bold !important;
-            cursor: default;
         }
         
-        /* Gestione area invisibile per il click nativo */
-        .sidebar-clickable div.stButton > button {
-            position: absolute;
-            transform: translateY(-40px);
-            height: 38px !important;
-            width: 100% !important;
-            background: transparent !important;
-            color: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            cursor: pointer;
-            z-index: 10;
-        }
-        .sidebar-clickable div.stButton > button:hover {
-            background: transparent !important;
-            color: transparent !important;
-            border: none !important;
-        }
-        
-        /* Monitor Panel Card */
+        /* Componenti di Layout interni alle Pagine */
+        .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 0px; margin-bottom: 10px; }
+        .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         .card-title { color: #FFD700; font-weight: 700; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #222222; padding-bottom: 4px; text-transform: uppercase; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         .stat-val { font-size: 20px; font-weight: 700; color: #FFFFFF; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         .stat-sub { font-size: 9px; color: #666666; text-transform: uppercase; font-weight: bold; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
@@ -95,7 +83,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. FUNZIONI DATI ---
+# --- 3. FUNZIONE DI RECUPERO DATI CORE ---
 def get_data(table):
     if not supabase: return pd.DataFrame()
     try:
@@ -106,24 +94,9 @@ def get_data(table):
 trades = get_data("trades")
 balances = get_data("balances")
 
-# --- 4. NAVIGAZIONE ---
-if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
-def set_page(name): st.session_state.page = name
+# --- 4. LOGICHE DELLE SINGOLE PAGINE (FUNZIONI MODULARI) ---
 
-with st.sidebar:
-    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:25px; padding-left:15px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
-    
-    pages = ["DASHBOARD", "BLOTTER", "CALENDAR", "VAULTS"]
-    
-    for p in pages:
-        is_active = "nav-active" if st.session_state.page == p else ""
-        st.markdown(f"<div class='nav-item {is_active}'>{p}</div>", unsafe_allow_html=True)
-        st.markdown("<div class='sidebar-clickable'>", unsafe_allow_html=True)
-        st.button("", key=f"nav_btn_{p}", on_click=set_page, args=(p,))
-        st.markdown("</div>", unsafe_allow_html=True)
-
-# --- 5. PAGINA: DASHBOARD ---
-if st.session_state.page == 'DASHBOARD':
+def render_dashboard():
     st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ DASHBOARD</h2>", unsafe_allow_html=True)
     if not balances.empty:
         st.markdown("<div class='ticker-label'>GLOBAL_LIQUIDITY_RESERVES (AGGREGATED BY CURRENCY)</div>", unsafe_allow_html=True)
@@ -154,8 +127,7 @@ if st.session_state.page == 'DASHBOARD':
                 """, unsafe_allow_html=True)
     else: st.warning("Inizializza i tuoi conti nella sezione VAULTS.")
 
-# --- 6. PAGINA: BLOTTER ---
-elif st.session_state.page == 'BLOTTER':
+def render_blotter():
     st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ TRADING_BLOTTER</h2>", unsafe_allow_html=True)
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
 
@@ -245,8 +217,7 @@ elif st.session_state.page == 'BLOTTER':
                 }).eq("id", int(r['id'])).execute()
             st.rerun()
 
-# --- 7. PAGINA: CALENDAR ---
-elif st.session_state.page == 'CALENDAR':
+def render_calendar():
     st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ PERFORMANCE_CALENDAR</h2>", unsafe_allow_html=True)
     if not trades.empty:
         time_df = trades[(trades['status'] == 'CHIUSA') & (trades['close_date'].notna())].copy()
@@ -297,8 +268,7 @@ elif st.session_state.page == 'CALENDAR':
             st.plotly_chart(fig_yearly, use_container_width=True)
         else: st.info("Nessuna operazione consolidata disponibile.")
 
-# --- 8. PAGINA: VAULTS ---
-elif st.session_state.page == 'VAULTS':
+def render_vaults():
     st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ VAULTS_MANAGEMENT</h2>", unsafe_allow_html=True)
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
@@ -354,3 +324,18 @@ elif st.session_state.page == 'VAULTS':
                     if st.button("❌ REMOVE VAULT", key=f"del_{row_id}"):
                         supabase.table("balances").delete().eq("id", row_id).execute(); st.rerun()
                 st.markdown("---")
+
+# --- 5. MOTORE DI ROUTING NATIVO MULTIPAGINA ST.NAVIGATION ---
+
+# Intestazione Sidebar fissa e pulita
+st.sidebar.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-top:10px; margin-bottom:15px; padding-left:15px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
+
+# Dichiarazione nativa delle pagine logiche dell'app
+page_dashboard = st.Page(render_dashboard, title="DASHBOARD")
+page_blotter   = st.Page(render_blotter, title="BLOTTER")
+page_calendar  = st.Page(render_calendar, title="CALENDAR")
+page_vaults    = st.Page(render_vaults, title="VAULTS")
+
+# Iniezione nel router nativo di Streamlit
+pg = st.navigation([page_dashboard, page_blotter, page_calendar, page_vaults], position="sidebar")
+pg.run()
