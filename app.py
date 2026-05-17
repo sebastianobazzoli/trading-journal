@@ -121,12 +121,11 @@ if st.session_state.page == 'DASHBOARD':
                 """, unsafe_allow_html=True)
     else: st.warning("Inizializza i tuoi conti nella sezione VAULTS.")
 
-# --- 6. PAGINA: BLOTTER (RIMOZIONE EMOJI EFFETTUATA) ---
+# --- 6. PAGINA: BLOTTER ---
 elif st.session_state.page == 'BLOTTER':
     st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ TRADING_BLOTTER</h2>", unsafe_allow_html=True)
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
 
-    # Sostituita emoji con dicitura sintattica standard
     with st.expander("[NEW_ORDER_TICKET]", expanded=False):
         if valid_accounts:
             with st.form("trade_form", clear_on_submit=True):
@@ -238,7 +237,14 @@ elif st.session_state.page == 'CALENDAR':
             pivot_trades = daily_agg.pivot(index='month_name', columns='day', values='num_trades').reindex(index=months_order, columns=all_days).fillna(0)
             pivot_assets = daily_agg.pivot(index='month_name', columns='day', values='assets_list').reindex(index=months_order, columns=all_days).fillna("None")
 
-            fig_daily = go.Figure(data=go.Heatmap(z=pivot_daily.values, x=pivot_daily.columns, y=pivot_daily.index, colorscale=[[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]]], zmid=0.0, showscale=True, hovertemplate="<b>MESE:</b> %{y}<br><b>GIORNO:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_trades.values, pivot_assets.values))))
+            # FIX: Corretto l'annidamento dell'array colorscale (rimosse le parentesi triple errate)
+            fig_daily = go.Figure(data=go.Heatmap(
+                z=pivot_daily.values, x=pivot_daily.columns, y=pivot_daily.index, 
+                colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], 
+                zmid=0.0, showscale=True, 
+                hovertemplate="<b>MESE:</b> %{y}<br><b>GIORNO:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", 
+                customdata=list(zip(pivot_trades.values, pivot_assets.values))
+            ))
             
             fig_daily.update_layout(autosize=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Consolas, Monaco, monospace", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
             fig_daily.update_xaxes(tickmode="linear", dtick=1, gridcolor='#222222')
