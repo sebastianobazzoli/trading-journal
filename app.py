@@ -58,87 +58,81 @@ with st.sidebar:
     st.button("[02] TRADE_EXECUTION", on_click=set_page, args=('TRADE',))
     st.button("[03] SYSTEM_SETTINGS", on_click=set_page, args=('SETTINGS',))
 
-# --- 5. DASHBOARD (Semplificata per brevità) ---
+# --- 5. DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
     st.markdown("### / MONITOR_DASHBOARD")
     if not balances.empty:
-        st.info("Dashboard attiva. Vai in SETTINGS per vedere il dettaglio dei conti.")
+        st.info("Dashboard attiva. I dati di rendimento globale e liquidità sono sincronizzati con le impostazioni del Vault.")
     else:
-        st.warning("Inizializza i conti in SETTINGS.")
+        st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS per sbloccare la Dashboard globale.")
 
-# --- 6. TRADE EXECUTION (COLORI RIPRISTINATI) ---
+# --- 6. TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     
     with st.expander("NEW_TRADE_ENTRY", expanded=False):
-        with st.form("trade_form", clear_on_submit=True):
-            c1, c2, c3, c4 = st.columns(4)
-            asset = c1.text_input("TICKER")
-            side = c2.selectbox("SIDE", ["LONG", "SHORT"])
-            qty = c3.number_input("QTY", min_value=0.0, step=0.01)
-            entry_p = c4.number_input("ENTRY", min_value=0.0)
-            
-            c5, c6, c7, c8 = st.columns(4)
-            exit_p = c5.number_input("EXIT (OUT)", min_value=0.0, value=0.0)
-            open_d = c6.date_input("OPEN DATE")
-            lev = c7.number_input("LEV", min_value=1.0, value=1.0)
-            acc_list = balances['account_name'].unique().tolist() if not balances.empty else ["Main"]
-            acc_choice = c8.selectbox("ACCOUNT", acc_list)
+        # Controlliamo se esistono conti nei settings per vincolare l'operatività
+        if not balances.empty and 'account_name' in balances.columns:
+            with st.form("trade_form", clear_on_submit=True):
+                c1, c2, c3, c4 = st.columns(4)
+                asset = c1.text_input("TICKER")
+                side = c2.selectbox("SIDE", ["LONG", "SHORT"])
+                qty = c3.number_input("QTY", min_value=0.0, step=0.01)
+                entry_p = c4.number_input("ENTRY", min_value=0.0)
+                
+                c5, c6, c7 = st.columns(3)
+                exit_p = c5.number_input("EXIT (OUT)", min_value=0.0, value=0.0)
+                open_d = c6.date_input("OPEN DATE")
+                lev = c7.number_input("LEV", min_value=1.0, value=1.0)
+                
+                # SELEZIONE VINCOLATA DAI SETTINGS
+                c8, c9 = st.columns(2)
+                acc_options = balances['account_name'].unique().tolist()
+                acc_choice = c8.selectbox("LINK TO VAULT ACCOUNT", acc_options)
+                
+                # Filtra dinamicamente le valute disponibili per quel conto specifico
+                avail_currencies = balances[balances['account_name'] == acc_choice]['currency'].unique().tolist()
+                curr_choice = c9.selectbox("CURRENCY", avail_currencies)
 
-            if st.form_submit_button("REGISTRA"):
-                status = "CHIUSA" if exit_p > 0 else "APERTA"
-                cost = round((entry_p * qty) / lev, 2)
-                pnl = round(((exit_p - entry_p) * qty * (1 if side == "LONG" else -1)), 2) if exit_p > 0 else 0
-                supabase.table("trades").insert({
-                    "asset": asset, "side": side, "shares": qty, "entry_price": entry_p,
-                    "exit_price": exit_p, "status": status, "date": str(open_d),
-                    "leverage": lev, "cost": cost, "profit": pnl, 
-                    "pnl_perc": round(pnl/cost*100, 2) if (exit_p > 0 and cost > 0) else 0,
-                    "portfolio": acc_choice, "currency": "USD", "instrument": "Stock"
-                }).execute()
-                st.rerun()
+                if st.form_submit_button("REGISTRA"):
+                    status = "CHIUSA" if exit_p > 0 else "APERTA"
+                    cost = round((entry_p * qty) / lev, 2)
+                    pnl = round(((exit_p - entry_p) * qty * (1 if side == "LONG" else -1)), 2) if exit_p > 0 else 0
+                    supabase.table("trades").insert({
+                        "asset": asset, "side": side, "shares": qty, "entry_price": entry_p,
+                        "exit_price": exit_p, "status": status, "date": str(open_d),
+                        "leverage": lev, "cost": cost, "profit": pnl, 
+                        "pnl_perc": round(pnl/cost*100, 2) if (exit_p > 0 and cost > 0) else 0,
+                        "portfolio": acc_choice, "currency": curr_choice, "instrument": "Stock"
+                    }).execute()
+                    st.rerun()
+        else:
+            st.error("ERRORE DI SISTEMA: Impossibile inserire trade. Devi prima creare e inizializzare almeno un conto con relativa valuta nella pagina SYSTEM_SETTINGS.")
 
     if not trades.empty:
-        # Arrotondamento display
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
-            trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
+            if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
-        # LOGICA COLORI RIPRISTINATA
         def style_ledger(df):
             s = pd.DataFrame('', index=df.index, columns=df.columns)
-            # Profitto in MAGENTA
-            if 'profit' in df.columns:
-                s['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF' if float(x) > 0 else ('color: #FF00FF' if float(x) < 0 else ''))
-            # Percentuale in VERDE/ROSSO
-            if 'pnl_perc' in df.columns:
-                s['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
-            # Stato APERTA in Verde
-            if 'status' in df.columns:
-                s['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
+            if 'profit' in df.columns: s['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF' if float(x) != 0 else '')
+            if 'pnl_perc' in df.columns: s['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
+            if 'status' in df.columns: s['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
             return s
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
-        
-        # Tabella Fit-to-screen
         edited = st.data_editor(
-            trades.style.apply(style_ledger, axis=None),
+            trades.sort_values("status", ascending=False) if 'status' in trades.columns else trades,
             use_container_width=True, hide_index=True,
-            disabled=["id", "cost", "profit", "pnl_perc", "status"],
-            column_config={
-                "id": None, "asset": "TKR", "side": "S", "shares": "QTY", 
-                "entry_price": "IN", "exit_price": "OUT", "cost": "COST", 
-                "profit": "P&L", "pnl_perc": "%", "status": "STATO"
-            },
-            key="ledger_v12"
+            disabled=["id", "cost", "profit", "pnl_perc", "status", "portfolio", "currency"],
+            column_config={"id": None, "asset": "TKR", "side": "S", "shares": "QTY", "entry_price": "IN", "exit_price": "OUT", "cost": "COST", "profit": "P&L", "pnl_perc": "%", "status": "STATO"},
+            key="ledger_v13"
         )
         
         if st.button("SYNCHRONIZE"):
             for d in (set(trades['id']) - set(edited['id'])): supabase.table("trades").delete().eq("id", d).execute()
             for _, r in edited.iterrows():
-                p_out = float(r['exit_price'])
-                p_in = float(r['entry_price'])
-                q = float(r['shares'])
-                c = float(r['cost'])
+                p_out, p_in, q, c = float(r['exit_price']), float(r['entry_price']), float(r['shares']), float(r['cost'])
                 pnl = round(((p_out - p_in) * q * (1 if r['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
                 supabase.table("trades").update({
                     "exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA",
@@ -146,14 +140,14 @@ elif st.session_state.page == 'TRADE':
                 }).eq("id", r['id']).execute()
             st.rerun()
 
-# --- 7. SETTINGS (FLASH CARDS & MULTI-CURRENCY) ---
+# --- 7. SETTINGS ---
 elif st.session_state.page == 'SETTINGS':
     st.markdown("### / SYSTEM_SETTINGS")
     
     with st.expander("ADD_NEW_ACCOUNT", expanded=True):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
-            n = c1.text_input("NOME CONTO")
+            n = c1.text_input("ACCOUNT NAME")
             cr = c2.selectbox("VALUTA", ["USD", "EUR", "USDT", "BTC", "ETH"])
             bl = c3.number_input("SALDO INIZIALE", min_value=0.0)
             if st.form_submit_button("INIZIALIZZA"):
@@ -164,7 +158,6 @@ elif st.session_state.page == 'SETTINGS':
                     except Exception as e: st.error(f"Errore DB: {e}")
 
     if not balances.empty:
-        # Flash Cards
         st.markdown("<div class='ticker-label'>VAULT_INSIGHTS</div>", unsafe_allow_html=True)
         for acc in balances['account_name'].unique():
             acc_data = balances[balances['account_name'] == acc]
@@ -173,18 +166,17 @@ elif st.session_state.page == 'SETTINGS':
             total_bal = 0
             margin_used = 0
             for _, r in acc_data.iterrows():
-                # Calcolo semplificato P&L per questa card
                 init = float(r['initial_balance'])
-                pnl = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
+                pnl = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['currency'] == r['currency']) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
                 total_bal += (init + pnl)
-                margin_used += pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
+                margin_used += pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['currency'] == r['currency']) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
             
             liq = total_bal - margin_used
             
             with c_info:
                 st.markdown(f"<div class='panel'><div class='card-title'>{acc}</div><div class='stat-sub'>Totale</div><div class='stat-val'>{total_bal:,.2f}</div><div class='stat-sub' style='margin-top:10px;'>Libero: <span style='color:#00FF41;'>{liq:,.2f}</span></div></div>", unsafe_allow_html=True)
             with c_chart:
-                fig = px.pie(pd.DataFrame({"Cat": ["Libero", "Impegnato"], "Val": [liq, margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Libero": "#00FF41", "Impegnato": "#222"})
+                fig = px.pie(pd.DataFrame({"Cat": ["Libero", "Impegnato"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Libero": "#00FF41", "Impegnato": "#222"})
                 fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=150, margin=dict(l=0,r=0,t=0,b=0))
                 st.plotly_chart(fig, use_container_width=True)
 
