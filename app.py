@@ -25,12 +25,15 @@ st.markdown("""
         [data-testid="stSidebar"] { background-color: #080808 !important; border-right: 1px solid #1A1A1A !important; padding-top: 2rem !important; }
         .panel { border: 1px solid #1A1A1A; padding: 15px; background: #0A0A0A; border-radius: 4px; margin-bottom: 15px; }
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+        
+        /* Bottoni Rigorosi */
         div.stButton > button {
             background-color: #0A0A0A !important; color: #888 !important; border: 1px solid #1A1A1A !important;
             border-radius: 2px !important; padding: 6px 20px !important; font-family: 'Roboto Mono', monospace !important;
             font-size: 11px !important; text-transform: uppercase !important; transition: all 0.2s ease !important;
         }
         div.stButton > button:hover { border-color: #00FF41 !important; color: #00FF41 !important; }
+        
         .card-title { color: #00FF41; font-weight: 700; font-size: 14px; margin-bottom: 10px; border-bottom: 1px solid #1A1A1A; padding-bottom: 5px; }
         .stat-val { font-size: 18px; font-weight: 700; color: #FFF; }
         .stat-sub { font-size: 10px; color: #555; text-transform: uppercase; }
@@ -66,26 +69,18 @@ if st.session_state.page == 'DASHBOARD':
     else:
         st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS per sbloccare la Dashboard globale.")
 
-# --- 6. TRADE EXECUTION ---
+# --- 6. TRADE EXECUTION (PRESERVATA TOTALMENTE) ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
-    
-    # Lista conti validi per i controlli di sicurezza
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
 
     with st.expander("NEW_TRADE_ENTRY", expanded=False):
         if valid_accounts:
             with st.form("trade_form", clear_on_submit=True):
                 c1, c2, c3, c4 = st.columns(4)
-                asset = c1.text_input("TICKER")
-                side = c2.selectbox("SIDE", ["LONG", "SHORT"])
-                qty = c3.number_input("QTY", min_value=0.0, step=0.01)
-                entry_p = c4.number_input("ENTRY", min_value=0.0)
-                
+                asset, side, qty, entry_p = c1.text_input("TICKER"), c2.selectbox("SIDE", ["LONG", "SHORT"]), c3.number_input("QTY", min_value=0.0, step=0.01), c4.number_input("ENTRY", min_value=0.0)
                 c5, c6, c7 = st.columns(3)
-                exit_p = c5.number_input("EXIT (OUT)", min_value=0.0, value=0.0)
-                open_d = c6.date_input("OPEN DATE")
-                lev = c7.number_input("LEV", min_value=1.0, value=1.0)
+                exit_p, open_d, lev = c5.number_input("EXIT (OUT)", min_value=0.0, value=0.0), c6.date_input("OPEN DATE"), c7.number_input("LEV", min_value=1.0, value=1.0)
                 
                 c8, c9 = st.columns(2)
                 acc_choice = c8.selectbox("LINK TO VAULT ACCOUNT", valid_accounts)
@@ -97,15 +92,14 @@ elif st.session_state.page == 'TRADE':
                     cost = round((entry_p * qty) / lev, 2)
                     pnl = round(((exit_p - entry_p) * qty * (1 if side == "LONG" else -1)), 2) if exit_p > 0 else 0
                     supabase.table("trades").insert({
-                        "asset": asset, "side": side, "shares": qty, "entry_price": entry_p,
-                        "exit_price": exit_p, "status": status, "date": str(open_d),
-                        "leverage": lev, "cost": cost, "profit": pnl, 
+                        "asset": asset, "side": side, "shares": qty, "entry_price": entry_p, "exit_price": exit_p,
+                        "status": status, "date": str(open_d), "leverage": lev, "cost": cost, "profit": pnl, 
                         "pnl_perc": round(pnl/cost*100, 2) if (exit_p > 0 and cost > 0) else 0,
                         "portfolio": acc_choice, "currency": curr_choice, "instrument": "Stock"
                     }).execute()
                     st.rerun()
         else:
-            st.error("ERRORE DI SISTEMA: Impossibile inserire trade. Devi prima creare e inizializzare almeno un conto con relativa valuta nella pagina SYSTEM_SETTINGS.")
+            st.error("ERRORE DI SISTEMA: Crea prima un conto in SYSTEM_SETTINGS.")
 
     if not trades.empty:
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
@@ -119,92 +113,125 @@ elif st.session_state.page == 'TRADE':
             return s
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
-        
-        # Abilitata la modifica della colonna portfolio se necessario, ma validata nel SYNC
         edited = st.data_editor(
             trades.sort_values("status", ascending=False) if 'status' in trades.columns else trades,
-            use_container_width=True, hide_index=True,
-            disabled=["id", "cost", "profit", "pnl_perc", "status"],
-            column_config={
-                "id": None, "asset": "TKR", "side": "S", "shares": "QTY", 
-                "entry_price": "IN", "exit_price": "OUT", "cost": "COST", 
-                "profit": "P&L", "pnl_perc": "%", "status": "STATO",
-                "portfolio": st.column_config.SelectboxColumn("CONTO", options=valid_accounts, width=90)
-            },
+            use_container_width=True, hide_index=True, disabled=["id", "cost", "profit", "pnl_perc", "status"],
+            column_config={"id": None, "asset": "TKR", "side": "S", "shares": "QTY", "entry_price": "IN", "exit_price": "OUT", "cost": "COST", "profit": "P&L", "pnl_perc": "%", "status": "STATO", "portfolio": st.column_config.SelectboxColumn("CONTO", options=valid_accounts, width=90)},
             key="ledger_v14"
         )
         
         if st.button("SYNCHRONIZE"):
-            # Controllo di sicurezza preventivo: ogni riga modificata DEVE essere associata a un conto esistente
             has_error = False
             for idx, row in edited.iterrows():
-                # Se la colonna conto è vuota o il conto inserito non è tra quelli validi nei settings
                 if 'portfolio' not in row or pd.isna(row['portfolio']) or str(row['portfolio']).strip() == "" or row['portfolio'] not in valid_accounts:
                     has_error = True
-                    st.error(f"ERRORE DI VALIDAZIONE: La riga con asset '{row.get('asset', 'Sconosciuto')}' non è associata a un conto valido nei Settings. Operazione interrotta.")
+                    st.error(f"ERRORE: Riga asset '{row.get('asset', 'Sconosciuto')}' non associata a un conto valido.")
                     break
             
             if not has_error:
-                try:
-                    # Se passa il controllo, esegue l'allineamento sul database
-                    ids_del = set(trades['id']) - set(edited['id'])
-                    for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
-                    
-                    for _, r in edited.iterrows():
-                        p_out, p_in, q, c = float(r['exit_price']), float(r['entry_price']), float(r['shares']), float(r['cost'])
-                        pnl = round(((p_out - p_in) * q * (1 if r['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
-                        supabase.table("trades").update({
-                            "exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA",
-                            "portfolio": r['portfolio'], # Salva la modifica del conto se cambiata
-                            "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0
-                        }).eq("id", r['id']).execute()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Errore durante l'aggiornamento del DB: {e}")
+                ids_del = set(trades['id']) - set(edited['id'])
+                for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
+                for _, r in edited.iterrows():
+                    p_out, p_in, q, c = float(r['exit_price']), float(r['entry_price']), float(r['shares']), float(r['cost'])
+                    pnl = round(((p_out - p_in) * q * (1 if r['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
+                    supabase.table("trades").update({"exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA", "portfolio": r['portfolio'], "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0}).eq("id", r['id']).execute()
+                st.rerun()
 
-# --- 7. SETTINGS ---
+# --- 7. PAGINA: SETTINGS (POTENZIATA CON EDITING DIRETTO) ---
 elif st.session_state.page == 'SETTINGS':
     st.markdown("### / SYSTEM_SETTINGS")
     
-    with st.expander("ADD_NEW_ACCOUNT", expanded=True):
+    with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
-            n = c1.text_input("ACCOUNT NAME")
-            cr = c2.selectbox("VALUTA", ["USD", "EUR", "USDT", "BTC", "ETH"])
-            bl = c3.number_input("SALDO INIZIALE", min_value=0.0)
+            n, cr, bl = c1.text_input("ACCOUNT NAME"), c2.selectbox("CURR", ["USD", "EUR", "USDT", "BTC", "ETH"]), c3.number_input("INITIAL BALANCE", min_value=0.0)
             if st.form_submit_button("INIZIALIZZA"):
                 if n:
-                    try:
-                        supabase.table("balances").insert({"account_name": n, "currency": cr, "initial_balance": bl}).execute()
-                        st.rerun()
-                    except Exception as e: st.error(f"Errore DB: {e}")
+                    supabase.table("balances").insert({"account_name": n, "currency": cr, "initial_balance": bl}).execute()
+                    st.rerun()
 
     if not balances.empty:
-        st.markdown("<div class='ticker-label'>VAULT_INSIGHTS</div>", unsafe_allow_html=True)
-        for acc in balances['account_name'].unique():
+        st.markdown("<div class='ticker-label'>VAULT_INSIGHTS & LIVE MANAGEMENT</div>", unsafe_allow_html=True)
+        unique_accounts = balances['account_name'].unique()
+        
+        # Generiamo i blocchi interattivi per ogni conto reale
+        for acc in unique_accounts:
             acc_data = balances[balances['account_name'] == acc]
-            c_info, c_chart = st.columns([1, 1.5])
             
-            total_bal = 0
-            margin_used = 0
-            for _, r in acc_data.iterrows():
-                init = float(r['initial_balance'])
-                pnl = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
-                total_bal += (init + pnl)
-                margin_used += pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
-            
-            liq = total_bal - margin_used
-            
-            with c_info:
-                st.markdown(f"<div class='panel'><div class='card-title'>{acc}</div><div class='stat-sub'>Totale</div><div class='stat-val'>{total_bal:,.2f}</div><div class='stat-sub' style='margin-top:10px;'>Libero: <span style='color:#00FF41;'>{liq:,.2f}</span></div></div>", unsafe_allow_html=True)
-            with c_chart:
-                fig = px.pie(pd.DataFrame({"Cat": ["Libero", "Impegnato"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Libero": "#00FF41", "Impegnato": "#222"})
-                fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=150, margin=dict(l=0,r=0,t=0,b=0))
-                st.plotly_chart(fig, use_container_width=True)
+            # Contenitore principale per Conto
+            with st.container():
+                c_info, c_chart = st.columns([1, 1.5])
+                
+                total_bal = 0
+                margin_used = 0
+                for _, r in acc_data.iterrows():
+                    init = float(r['initial_balance'])
+                    pnl = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
+                    total_bal += (init + pnl)
+                    margin_used += pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
+                
+                liq = total_bal - margin_used
+                
+                with c_info:
+                    st.markdown(f"""
+                        <div class='panel'>
+                            <div class='card-title'>{acc.upper()}</div>
+                            <div class='stat-sub'>Patrimonio Totale</div>
+                            <div class='stat-val'>{total_bal:,.2f}</div>
+                            <div class='stat-sub' style='margin-top:10px;'>Liquidità Disponibile: <span style='color:#00FF41;'>{liq:,.2f}</span></div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                with c_chart:
+                    fig = px.pie(pd.DataFrame({"Cat": ["Libero", "Impegnato"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Libero": "#00FF41", "Impegnato": "#222"})
+                    fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=140, margin=dict(l=0,r=0,t=0,b=0))
+                    st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("<div class='ticker-label'>EDIT_DATA</div>", unsafe_allow_html=True)
-        edited_bal = st.data_editor(balances, use_container_width=True, hide_index=True, column_config={"id": None})
-        if st.button("SAVE SETTINGS"):
-            for _, r in edited_bal.iterrows():
-                supabase.table("balances").update({"account_name": r['account_name'], "currency": r['currency'], "initial_balance": r['initial_balance']}).eq("id", r['id']).execute()
-            st.rerun()
+        # SEZIONE MODIFICA STRUTTURALE (Sotto le Card)
+        st.markdown("<br><div class='ticker-label'>CONSOLE_DI_MODIFICA_CONTI</div>", unsafe_allow_html=True)
+        
+        # La tabella permette di sovrascrivere o eliminare i conti passati
+        edited_bal = st.data_editor(
+            balances, 
+            use_container_width=True, 
+            hide_index=True, 
+            num_rows="dynamic",
+            column_config={
+                "id": None, 
+                "account_name": st.column_config.TextColumn("NOME CONTO", required=True), 
+                "currency": st.column_config.SelectboxColumn("VALUTA", options=["USD", "EUR", "USDT", "BTC", "ETH"], required=True), 
+                "initial_balance": st.column_config.NumberColumn("SALDO INIZIALE", format="%.2f", min_value=0.0)
+            },
+            key="secure_settings_editor"
+        )
+        
+        if st.button("SYNC_SETTINGS_DATA"):
+            try:
+                # 1. Identifica ed elimina le righe rimosse dall'utente nell'editor
+                ids_originali = set(balances['id'])
+                ids_rimasti = set(edited_bal['id'].dropna())
+                ids_da_cancellare = ids_originali - ids_rimasti
+                
+                for d_id in ids_da_cancellare:
+                    supabase.table("balances").delete().eq("id", d_id).execute()
+                
+                # 2. Aggiorna o Inserisce le righe modificate/nuove
+                for _, r in edited_bal.iterrows():
+                    if pd.isna(r['id']):
+                        # Se l'id manca, l'utente ha aggiunto una riga direttamente dalla tabella
+                        supabase.table("balances").insert({
+                            "account_name": r['account_name'], 
+                            "currency": r['currency'], 
+                            "initial_balance": r['initial_balance']
+                        }).execute()
+                    else:
+                        # Altrimenti aggiorna la riga esistente
+                        supabase.table("balances").update({
+                            "account_name": r['account_name'], 
+                            "currency": r['currency'], 
+                            "initial_balance": r['initial_balance']
+                        }).eq("id", r['id']).execute()
+                        
+                st.rerun()
+            except Exception as e:
+                st.error(f"Errore durante l'aggiornamento dei conti: {e}")
