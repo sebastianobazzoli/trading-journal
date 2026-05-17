@@ -6,7 +6,7 @@ import plotly.express as px
 from supabase import create_client
 
 # --- 1. CONFIGURAZIONE & COSTANTI GLOBALI ---
-st.set_page_config(page_title="TERMINAL_X", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="FLOWAY_TERMINAL", layout="wide", initial_sidebar_state="expanded")
 
 # Costante globale valute
 valid_currencies = ["USD", "EUR", "USDT", "BTC", "ETH"]
@@ -18,7 +18,7 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS BLOOMBERG TERMINAL CORE (AMBER HOVER PATCH) ---
+# --- 2. CSS FLOWAY CORE INTERFACE ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
@@ -28,11 +28,11 @@ st.markdown("""
         html, body, [data-testid="stAppViewContainer"] { background-color: #000000 !important; font-family: 'Roboto Mono', monospace !important; color: #D5D5D5; }
         [data-testid="stSidebar"] { background-color: #0A0A0A !important; border-right: 2px solid #222222 !important; padding-top: 1rem !important; }
         
-        /* Pannelli Stile Bloomberg */
+        /* Pannelli Stile Floway */
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 2px; margin-bottom: 10px; }
         .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; }
         
-        /* Pulsanti Professionali - FIX HOVER GIALLO BLOOMBERG */
+        /* Pulsanti Laterali con Testo Giallo Istituzionale */
         div.stButton > button {
             background-color: #111111 !important; color: #FFD700 !important; border: 1px solid #333333 !important;
             border-radius: 0px !important; padding: 4px 14px !important; font-family: 'Roboto Mono', monospace !important;
@@ -71,7 +71,7 @@ if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
 with st.sidebar:
-    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:16px; margin-bottom:20px; padding-left:10px;'>BLOOMBERG_X // OS</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:20px; padding-left:10px; letter-spacing:1px;'>FLOWAY // OS</div>", unsafe_allow_html=True)
     st.button("<GO> 1 . MONITOR_DASHBOARD", on_click=set_page, args=('DASHBOARD',))
     st.button("<GO> 2 . TRADE_EXECUTION_LOG", on_click=set_page, args=('TRADE',))
     st.button("<GO> 3 . PERFORMANCE_HEATMAP", on_click=set_page, args=('HEATMAP',))
@@ -79,7 +79,7 @@ with st.sidebar:
 
 # --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
-    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ BBG_MONITOR_DASHBOARD</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_MONITOR_DASHBOARD</h2>", unsafe_allow_html=True)
     if not balances.empty:
         st.markdown("<div class='ticker-label'>GLOBAL_LIQUIDITY_RESERVES (AGGREGATED BY CURRENCY)</div>", unsafe_allow_html=True)
         global_curr = balances['currency'].unique()
@@ -111,7 +111,7 @@ if st.session_state.page == 'DASHBOARD':
 
 # --- 6. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
-    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ BBG_EXECUTION_BLOTTER</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_EXECUTION_BLOTTER</h2>", unsafe_allow_html=True)
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
 
     with st.expander("📝 EXECUTE_NEW_ORDER_TICKET", expanded=False):
@@ -202,7 +202,7 @@ elif st.session_state.page == 'TRADE':
 
 # --- 7. PAGINA: PERFORMANCE HEATMAP ---
 elif st.session_state.page == 'HEATMAP':
-    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ PERFORMANCE_HEATMAP_ENGINE</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_PERFORMANCE_HEATMAP</h2>", unsafe_allow_html=True)
     if not trades.empty:
         time_df = trades[(trades['status'] == 'CHIUSA') & (trades['close_date'].notna())].copy()
         if not time_df.empty:
@@ -247,7 +247,7 @@ elif st.session_state.page == 'HEATMAP':
 
 # --- 8. PAGINA: SYSTEM SETTINGS ---
 elif st.session_state.page == 'SETTINGS':
-    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ SYSTEM_SETTINGS_VAULT</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_SETTINGS_VAULT</h2>", unsafe_allow_html=True)
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
