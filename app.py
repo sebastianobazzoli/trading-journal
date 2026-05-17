@@ -50,7 +50,7 @@ def get_data(table):
 trades = get_data("trades")
 balances = get_data("balances")
 
-# --- 4. NAVIGAZIONE AGGIORNATA ---
+# --- 4. NAVIGAZIONE ---
 if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
@@ -58,14 +58,14 @@ with st.sidebar:
     st.markdown("<div style='color:#00FF41; font-weight:700; font-size:18px; margin-top:20px;'>TERMINAL_OS</div>", unsafe_allow_html=True)
     st.button("[01] MONITOR_DASHBOARD", on_click=set_page, args=('DASHBOARD',))
     st.button("[02] TRADE_EXECUTION", on_click=set_page, args=('TRADE',))
-    st.button("[03] PERFORMANCE_HEATMAP", on_click=set_page, args=('HEATMAP',)) # Nuova pagina sotto Execution
+    st.button("[03] PERFORMANCE_HEATMAP", on_click=set_page, args=('HEATMAP',))
     st.button("[04] SYSTEM_SETTINGS", on_click=set_page, args=('SETTINGS',))
 
 # --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
     st.markdown("### / MONITOR_DASHBOARD")
     if not balances.empty: st.info("Dashboard attiva e agganciata al Vault di sistema.")
-    else: st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS per sbloccare la Dashboard.")
+    else: st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS.")
 
 # --- 6. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
@@ -110,7 +110,7 @@ elif st.session_state.page == 'TRADE':
         display_trades = trades[[col for col in column_order if col in trades.columns]].sort_values("STATO", ascending=False)
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
-        edited = st.data_editor(display_trades, use_container_width=True, hide_index=True, disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"], column_config={"id": None, "asset": "TKR", "side": "S", "shares": st.column_config.NumberColumn("QTY", format="%.2f"), "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), "leverage": "LEV", "cost": st.column_config.NumberColumn("COST", format="%.2f"), "portfolio": "CONTO", "currency": "VAL", "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), "%": st.column_config.TextColumn("RENDIMENTO", width=95), "STATO": st.column_config.TextColumn("STATO", width=90)}, key="ledger_v17")
+        edited = st.data_editor(display_trades, use_container_width=True, hide_index=True, disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"], column_config={"id": None, "asset": "TKR", "side": "S", "shares": st.column_config.NumberColumn("QTY", format="%.2f"), "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), "leverage": "LEV", "cost": st.column_config.NumberColumn("COST", format="%.2f"), "portfolio": "CONTO", "currency": "VAL", "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), "%": st.column_config.TextColumn("RENDIMENTO", width=95), "STATO": st.column_config.TextColumn("STATO", width=90)}, key="ledger_v18")
         
         if st.button("SYNCHRONIZE"):
             has_error = False
@@ -128,64 +128,105 @@ elif st.session_state.page == 'TRADE':
                     supabase.table("trades").update({"exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA", "portfolio": r['portfolio'], "cost": c, "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0}).eq("id", r['id']).execute()
                 st.rerun()
 
-# --- 7. PAGINA: PERFORMANCE HEATMAP (NUOVA SEZIONE) ---
+# --- 7. PAGINA: PERFORMANCE HEATMAP (CALENDAR VIEW) ---
 elif st.session_state.page == 'HEATMAP':
     st.markdown("### / PERFORMANCE_HEATMAP")
-    st.markdown("<div class='ticker-label'>RISK_MATRIX // CONTO VS ASSET PERFORMANCE</div>", unsafe_allow_html=True)
     
     if not trades.empty:
-        # Pulizia dati per elaborazione grafica
-        heatmap_df = trades.copy()
-        heatmap_df['profit'] = pd.to_numeric(heatmap_df['profit'], errors='coerce').fillna(0.0)
+        # Prepariamo i dati storici basandoci sulla data di chiusura della posizione
+        time_df = trades[trades['status'] == 'CHIUSA'].copy()
         
-        # Raggruppiamo i dati per fare una mappa basata sul profitto reale cumulativo
-        grouped_df = heatmap_df.groupby(['portfolio', 'asset'])['profit'].sum().reset_index()
-        
-        if not grouped_df.empty and grouped_df['profit'].any():
-            # Costruzione della Heatmap Istituzionale (Sfondo scuro, scala Divergente Grigio -> Rosso/Verde)
-            fig = px.density_heatmap(
-                grouped_df, 
-                x="portfolio", 
-                y="asset", 
-                z="profit",
-                labels={"portfolio": "CONTO", "asset": "ASSET (TKR)", "profit": "P&L TOTALE"},
-                color_continuous_scale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]], # Rosso (Loss) -> Scuro -> Verde (Profit)
-                color_continuous_midpoint=0.0
-            )
+        if not time_df.empty and 'close_date' in time_df.columns:
+            time_df['close_date'] = pd.to_datetime(time_df['close_date'])
+            time_df['profit'] = pd.to_numeric(time_df['profit'], errors='coerce').fillna(0.0)
             
-            # Layout del grafico coordinato con lo stile del terminale
-            fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(family="Roboto Mono, monospace", color="#CCC", size=11),
-                margin=dict(l=50, r=10, t=10, b=40),
-                height=500,
-                coloraxis_colorbar=dict(
-                    title="P&L VALUE",
-                    thicknessmode="pixels", thickness=15,
-                    lenmode="pixels", len=300,
-                    yanchor="top", y=1,
-                    ticks="outside"
-                )
-            )
+            # Estrattività temporale
+            time_df['year'] = time_df['close_date'].dt.year
+            time_df['month'] = time_df['close_date'].dt.month
+            time_df['day'] = time_df['close_date'].dt.day
+            time_df['month_name'] = time_df['close_date'].dt.strftime('%b')
             
-            # Griglia interna minimale
-            fig.update_xaxes(title_text="VAULT ACCOUNTS", gridcolor='#1A1A1A', color="#777")
-            fig.update_yaxes(title_text="TRADED ASSETS", gridcolor='#1A1A1A', color="#777")
+            # Mesi ordinati istituzionali
+            months_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+            # --- 1. HEATMAP MENSILE (GIORNO PER GIORNO) ---
+            st.markdown("<div class='ticker-label'>DAILY_OPERATIONAL_MATRIX // CURRENT_YEAR_BY_DAY</div>", unsafe_allow_html=True)
             
-            # Renderizzazione all'interno del pannello
+            current_year = datetime.date.today().year
+            daily_df = time_df[time_df['year'] == current_year]
+            
+            if not daily_df.empty:
+                # Aggregazione per giorno e mese con estrazione dei dettagli per l'hover
+                daily_agg = daily_df.groupby(['month_name', 'day']).agg(
+                    pnl_totale=('profit', 'sum'),
+                    num_trades=('id', 'count'),
+                    assets_list=('asset', lambda x: ", ".join(x.unique()))
+                ).reset_index()
+                
+                # Creiamo pivot completo 1-31 giorni per tutti i mesi per generare la griglia geometrica fissa
+                pivot_daily = daily_agg.pivot(index='month_name', columns='day', values='pnl_totale').reindex(months_order).fillna(0.0)
+                pivot_trades = daily_agg.pivot(index='month_name', columns='day', values='num_trades').reindex(months_order).fillna(0)
+                pivot_assets = daily_agg.pivot(index='month_name', columns='day', values='assets_list').reindex(months_order).fillna("None")
+
+                fig_daily = go.Figure(data=go.Heatmap(
+                    z=pivot_daily.values,
+                    x=pivot_daily.columns,
+                    y=pivot_daily.index,
+                    colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]],
+                    zmid=0.0,
+                    showscale=True,
+                    hovertemplate="<b>MESE:</b> %{y}<br><b>GIORNO:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>",
+                    customdata=list(zip(pivot_trades.values, pivot_assets.values))
+                ))
+                
+                fig_daily.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#CCC", size=10), height=320, margin=dict(l=50,r=10,t=10,b=30))
+                fig_daily.update_xaxes(title="GIORNO DEL MESE", tickmode="linear", dtick=1, gridcolor='#1A1A1A')
+                fig_daily.update_yaxes(gridcolor='#1A1A1A')
+                st.markdown("<div class='panel'>", unsafe_allow_html=True)
+                st.plotly_chart(fig_daily, use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.info(f"Nessuna operazione conclusa registrata nell'anno corrente ({current_year}).")
+
+            # --- 2. HEATMAP ANNUALE (MESE PER MESE) ---
+            st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY HISTORICAL PERFORMANCE</div>", unsafe_allow_html=True)
+            
+            yearly_agg = time_df.groupby(['year', 'month_name']).agg(
+                pnl_totale=('profit', 'sum'),
+                num_trades=('id', 'count'),
+                assets_list=('asset', lambda x: ", ".join(x.unique()))
+            ).reset_index()
+            
+            pivot_yearly = yearly_agg.pivot(index='year', columns='month_name', values='pnl_totale').reindex(columns=months_order).fillna(0.0)
+            pivot_y_trades = yearly_agg.pivot(index='year', columns='month_name', values='num_trades').reindex(columns=months_order).fillna(0)
+            pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(columns=months_order).fillna("None")
+
+            fig_yearly = go.Figure(data=go.Heatmap(
+                z=pivot_yearly.values,
+                x=pivot_yearly.columns,
+                y=pivot_yearly.index,
+                colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]],
+                zmid=0.0,
+                showscale=True,
+                hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>",
+                customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))
+            ))
+            
+            fig_yearly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#CCC", size=10), height=220, margin=dict(l=50,r=10,t=10,b=30))
+            fig_yearly.update_xaxes(gridcolor='#1A1A1A')
+            fig_yearly.update_yaxes(title="ANNO", tickmode="linear", dtick=1, gridcolor='#1A1A1A')
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig_yearly, use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
+            
         else:
-            st.info("Nessun dato di P&L registrato. Chiudi un'operazione con profitto o perdita nella tabella Execution per generare la mappa di rischio.")
+            st.info("La tabella degli storici non contiene righe con date valide o posizioni chiuse.")
     else:
-        st.info("Nessuna operazione presente nel registro di sistema.")
+        st.info("Inserisci o chiudi dei trade per abilitare le matrici temporali di performance.")
 
 # --- 8. PAGINA: SETTINGS ---
 elif st.session_state.page == 'SETTINGS':
     st.markdown("### / SYSTEM_SETTINGS")
-    # ... [Preservato e intatto il codice della sezione SETTINGS precedente] ...
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
