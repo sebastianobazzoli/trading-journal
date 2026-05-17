@@ -77,7 +77,7 @@ elif st.session_state.page == 'TRADE':
             with st.form("trade_form", clear_on_submit=True):
                 c1, c2, c3, c4 = st.columns(4)
                 asset, side, qty, entry_p = c1.text_input("TICKER"), c2.selectbox("SIDE", ["LONG", "SHORT"]), c3.number_input("QTY", min_value=0.0, step=0.01), c4.number_input("ENTRY", min_value=0.0)
-                c5, c6, c7 = c5, c6, c7 = st.columns(3)
+                c5, c6, c7 = st.columns(3)
                 exit_p, open_d, lev = c5.number_input("EXIT (OUT)", min_value=0.0, value=0.0), c6.date_input("OPEN DATE"), c7.number_input("LEV", min_value=1.0, value=1.0)
                 
                 c8, c9 = st.columns(2)
@@ -103,7 +103,6 @@ elif st.session_state.page == 'TRADE':
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
             if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
-        # Generazione indicatori visivi stringa
         trades['P&L'] = trades['profit'].apply(lambda x: f"◼ {x:,.2f}" if x == 0 else (f"▲ {x:,.2f}" if x > 0 else f"▼ {x:,.2f}"))
         trades['%'] = trades['pnl_perc'].apply(lambda x: f"◼ {x:,.2f}%" if x == 0 else (f"▲ {x:,.2f}%" if x > 0 else f"▼ {x:,.2f}%"))
         trades['STATO'] = trades['status'].apply(lambda x: f"⌾ {x}" if x == "APERTA" else f"• {x}")
@@ -112,29 +111,7 @@ elif st.session_state.page == 'TRADE':
         display_trades = trades[[col for col in column_order if col in trades.columns]].sort_values("STATO", ascending=False)
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
-        
-        # TABELLA MODIFICATA: sbloccate le date per l'inserimento manuale e la rimozione righe
-        edited = st.data_editor(
-            display_trades, 
-            use_container_width=True, 
-            hide_index=True, 
-            num_rows="dynamic", # Permette la rimozione/aggiunta righe
-            disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"], 
-            column_config={
-                "id": None, "asset": "TKR", "side": "S", 
-                "shares": st.column_config.NumberColumn("QTY", format="%.2f"), 
-                "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), 
-                "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), 
-                "date": st.column_config.TextColumn("OPEN DATE"),
-                "close_date": st.column_config.TextColumn("CLOSE DATE"), # SBLOCCATA PER LA HEATMAP
-                "leverage": "LEV", "cost": st.column_config.NumberColumn("COST", format="%.2f"), 
-                "portfolio": "CONTO", "currency": "VAL", 
-                "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), 
-                "%": st.column_config.TextColumn("RENDIMENTO", width=95), 
-                "STATO": st.column_config.TextColumn("STATO", width=90)
-            }, 
-            key="ledger_v21"
-        )
+        edited = st.data_editor(display_trades, use_container_width=True, hide_index=True, num_rows="dynamic", disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"], column_config={"id": None, "asset": "TKR", "side": "S", "shares": st.column_config.NumberColumn("QTY", format="%.2f"), "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), "date": st.column_config.TextColumn("OPEN DATE"), "close_date": st.column_config.TextColumn("CLOSE DATE"), "leverage": "LEV", "cost": st.column_config.NumberColumn("COST", format="%.2f"), "portfolio": "CONTO", "currency": "VAL", "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), "%": st.column_config.TextColumn("RENDIMENTO", width=95), "STATO": st.column_config.TextColumn("STATO", width=90)}, key="ledger_v21")
         
         if st.button("SYNCHRONIZE"):
             has_error = False
@@ -143,48 +120,30 @@ elif st.session_state.page == 'TRADE':
                     has_error = True; st.error(f"ERRORE: Riga asset '{row.get('asset')}' non valida."); break
             
             if not has_error:
-                # 1. Gestione Rimozione Righe cancellate dall'utente
                 ids_originali = set(trades['id'])
                 ids_rimasti = set(edited['id'].dropna())
-                for d_id in (ids_originali - ids_rimasti): 
-                    supabase.table("trades").delete().eq("id", d_id).execute()
-                
-                # 2. Aggiornamento dati modificati
+                for d_id in (ids_originali - ids_rimasti): supabase.table("trades").delete().eq("id", d_id).execute()
                 for _, r in edited.iterrows():
                     p_out, p_in, q = float(r['exit_price']), float(r['entry_price']), float(r['shares'])
                     orig = trades[trades['id'] == r['id']]; lev_val = float(orig['leverage'].values[0]) if not orig.empty else 1.0
                     c = round((p_in * q) / lev_val, 2)
                     pnl = round(((p_out - p_in) * q * (1 if r['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
-                    
-                    # Logica date per Heatmap
                     c_date = r['close_date']
-                    if p_out > 0 and (pd.isna(c_date) or str(c_date).strip() == "" or c_date == "None"):
-                        c_date = str(datetime.date.today())
-                    elif p_out == 0:
-                        c_date = None
+                    if p_out > 0 and (pd.isna(c_date) or str(c_date).strip() == "" or c_date == "None"): c_date = str(datetime.date.today())
+                    elif p_out == 0: c_date = None
                     
-                    supabase.table("trades").update({
-                        "exit_price": p_out, 
-                        "status": "CHIUSA" if p_out > 0 else "APERTA", 
-                        "date": str(r['date']),
-                        "close_date": str(c_date) if c_date else None,
-                        "portfolio": r['portfolio'], "cost": c, "profit": pnl, 
-                        "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0
-                    }).eq("id", r['id']).execute()
+                    supabase.table("trades").update({"exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA", "date": str(r['date']), "close_date": str(c_date) if c_date else None, "portfolio": r['portfolio'], "cost": c, "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0}).eq("id", r['id']).execute()
                 st.rerun()
 
 # --- 7. PAGINA: PERFORMANCE HEATMAP ---
 elif st.session_state.page == 'HEATMAP':
     st.markdown("### / PERFORMANCE_HEATMAP")
-    
     if not trades.empty:
         time_df = trades[(trades['status'] == 'CHIUSA') & (trades['close_date'].notna())].copy()
-        
         if not time_df.empty:
             time_df['close_date'] = pd.to_datetime(time_df['close_date'], errors='coerce')
             time_df = time_df.dropna(subset=['close_date'])
             time_df['profit'] = pd.to_numeric(time_df['profit'], errors='coerce').fillna(0.0)
-            
             time_df['year'] = time_df['close_date'].dt.year
             time_df['month'] = time_df['close_date'].dt.month
             time_df['day'] = time_df['close_date'].dt.day
@@ -196,22 +155,12 @@ elif st.session_state.page == 'HEATMAP':
             st.markdown("<div class='ticker-label'>DAILY_OPERATIONAL_MATRIX // FULL_YEAR_GRID (1-31)</div>", unsafe_allow_html=True)
             current_year = datetime.date.today().year
             daily_df = time_df[time_df['year'] == current_year]
-            
-            daily_agg = daily_df.groupby(['month_name', 'day']).agg(
-                pnl_totale=('profit', 'sum'), num_trades=('id', 'count'),
-                assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))
-            ).reset_index()
-            
+            daily_agg = daily_df.groupby(['month_name', 'day']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
             pivot_daily = daily_agg.pivot(index='month_name', columns='day', values='pnl_totale').reindex(index=months_order, columns=all_days).fillna(0.0)
             pivot_trades = daily_agg.pivot(index='month_name', columns='day', values='num_trades').reindex(index=months_order, columns=all_days).fillna(0)
             pivot_assets = daily_agg.pivot(index='month_name', columns='day', values='assets_list').reindex(index=months_order, columns=all_days).fillna("None")
 
-            fig_daily = go.Figure(data=go.Heatmap(
-                z=pivot_daily.values, x=pivot_daily.columns, y=pivot_daily.index,
-                colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]], zmid=0.0, showscale=True,
-                hovertemplate="<b>MESE:</b> %{y}<br><b>GIORNO:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>",
-                customdata=list(zip(pivot_trades.values, pivot_assets.values))
-            ))
+            fig_daily = go.Figure(data=go.Heatmap(z=pivot_daily.values, x=pivot_daily.columns, y=pivot_daily.index, colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>MESE:</b> %{y}<br><b>GIORNO:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_trades.values, pivot_assets.values))))
             fig_daily.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#CCC", size=10), height=320, margin=dict(l=50,r=10,t=10,b=30))
             fig_daily.update_xaxes(title="GIORNO DEL MESE", tickmode="linear", dtick=1, gridcolor='#1A1A1A')
             fig_daily.update_yaxes(gridcolor='#1A1A1A')
@@ -220,35 +169,26 @@ elif st.session_state.page == 'HEATMAP':
             st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY HISTORICAL PERFORMANCE</div>", unsafe_allow_html=True)
-            yearly_agg = time_df.groupby(['year', 'month_name']).agg(
-                pnl_totale=('profit', 'sum'), num_trades=('id', 'count'),
-                assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))
-            ).reset_index()
-            
+            yearly_agg = time_df.groupby(['year', 'month_name']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
             unique_years = sorted(time_df['year'].unique())
             pivot_yearly = yearly_agg.pivot(index='year', columns='month_name', values='pnl_totale').reindex(index=unique_years, columns=months_order).fillna(0.0)
             pivot_y_trades = yearly_agg.pivot(index='year', columns='month_name', values='num_trades').reindex(index=unique_years, columns=months_order).fillna(0)
             pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(index=unique_years, columns=months_order).fillna("None")
 
-            fig_yearly = go.Figure(data=go.Heatmap(
-                z=pivot_yearly.values, x=pivot_yearly.columns, y=pivot_yearly.index,
-                colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]], zmid=0.0, showscale=True,
-                hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>",
-                customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))
-            ))
+            fig_yearly = go.Figure(data=go.Heatmap(z=pivot_yearly.values, x=pivot_yearly.columns, y=pivot_yearly.index, colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))))
             fig_yearly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#CCC", size=10), height=220, margin=dict(l=50,r=10,t=10,b=30))
             fig_yearly.update_xaxes(gridcolor='#1A1A1A')
             fig_yearly.update_yaxes(title="ANNO", tickmode="linear", dtick=1, gridcolor='#1A1A1A')
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.plotly_chart(fig_yearly, use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
-        else: st.info("Nessuna operazione risulta attualmente nello stato 'CHIUSA' con una data di chiusura valida.")
+        else: st.info("Nessuna operazione conclusa registrata.")
     else: st.info("Chiudi dei trade per generare le matrici temporali di performance.")
 
-# --- 8. PAGINA: SETTINGS ---
+# --- 8. PAGINA: SETTINGS (FLASH CARD INTERATTIVE SENZA TABELLA BRUTTA) ---
 elif st.session_state.page == 'SETTINGS':
     st.markdown("### / SYSTEM_SETTINGS")
-    # ... [Invariata la logica dei Settings precedente] ...
+    
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
@@ -257,31 +197,60 @@ elif st.session_state.page == 'SETTINGS':
                 if n: supabase.table("balances").insert({"account_name": n, "currency": cr, "initial_balance": bl}).execute(); st.rerun()
 
     if not balances.empty:
-        st.markdown("<div class='ticker-label'>VAULT_INSIGHTS & LIVE MANAGEMENT</div>", unsafe_allow_html=True)
-        for acc in balances['account_name'].unique():
-            acc_data = balances[balances['account_name'] == acc]
+        st.markdown("<div class='ticker-label'>VAULT_INSIGHTS & LIVE CONSOLE</div>", unsafe_allow_html=True)
+        
+        # Iteriamo direttamente sulle righe reali delle currency per dare controllo totale per riga
+        for idx, row_balance in balances.iterrows():
+            acc = row_balance['account_name']
+            curr = row_balance['currency']
+            init_val = float(row_balance['initial_balance'])
+            row_id = row_balance['id']
+            
+            # Calcolo dinamico metriche della specifica valuta/conto
+            pnl = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['currency'] == curr) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
+            margin_used = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['currency'] == curr) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
+            
+            total_bal = init_val + pnl
+            liq = total_bal - margin_used
+            
+            # Generazione layout Flashcard Interattiva
             with st.container():
-                c_info, c_chart = st.columns([1, 1.5])
-                total_bal, margin_used = 0, 0
-                for _, r in acc_data.iterrows():
-                    init = float(r['initial_balance'])
-                    pnl = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
-                    total_bal += (init + pnl)
-                    margin_used += pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
-                liq = total_bal - margin_used
-                with c_info: st.markdown(f"<div class='panel'><div class='card-title'>{acc.upper()}</div><div class='stat-sub'>Patrimonio Totale</div><div class='stat-val'>{total_bal:,.2f}</div><div class='stat-sub' style='margin-top:10px;'>Liquidità Disponibile: <span style='color:#00FF41;'>{liq:,.2f}</span></div></div>", unsafe_allow_html=True)
+                c_info, c_chart, c_actions = st.columns([1.5, 1.5, 1])
+                
+                with c_info:
+                    st.markdown(f"""
+                        <div class='panel'>
+                            <div class='card-title'>{acc.upper()} // <span style='color:#777;'>{curr}</span></div>
+                            <div class='stat-sub'>Patrimonio Totale ({curr})</div>
+                            <div class='stat-val'>{total_bal:,.2f}</div>
+                            <div class='stat-sub' style='margin-top:10px;'>Liquidità Disponibile: <span style='color:#00FF41;'>{liq:,.2f}</span></div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                
                 with c_chart:
                     fig = px.pie(pd.DataFrame({"Cat": ["Libero", "Impegnato"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Libero": "#00FF41", "Impegnato": "#222"})
-                    fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=140, margin=dict(l=0,r=0,t=0,b=0)); st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("<br><div class='ticker-label'>CONSOLE_DI_MODIFICA_CONTI</div>", unsafe_allow_html=True)
-        edited_bal = st.data_editor(balances, use_container_width=True, hide_index=True, num_rows="dynamic", column_config={"id": None, "account_name": st.column_config.TextColumn("NOME CONTO", required=True), "currency": st.column_config.SelectboxColumn("VALUTA", options=["USD", "EUR", "USDT", "BTC", "ETH"], required=True), "initial_balance": st.column_config.NumberColumn("SALDO INIZIALE", format="%.2f", min_value=0.0)}, key="secure_settings_editor")
-        if st.button("SYNC_SETTINGS_DATA"):
-            try:
-                ids_ori = set(balances['id']); ids_rim = set(edited_bal['id'].dropna())
-                for d_id in (ids_ori - ids_rim): supabase.table("balances").delete().eq("id", d_id).execute()
-                for _, r in edited_bal.iterrows():
-                    if pd.isna(r['id']): supabase.table("balances").insert({"account_name": r['account_name'], "currency": r['currency'], "initial_balance": r['initial_balance']}).execute()
-                    else: supabase.table("balances").update({"account_name": r['account_name'], "currency": r['currency'], "initial_balance": r['initial_balance']}).eq("id", r['id']).execute()
-                st.rerun()
-            except Exception as e: st.error(f"Errore: {e}")
+                    fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=120, margin=dict(l=0,r=0,t=0,b=0))
+                    st.plotly_chart(fig, use_container_width=True, key=f"chart_{row_id}")
+                
+                # SEZIONE AZIONI: INLINE EDIT & REMOVE DIRECTLY INSIDE THE CARD
+                with c_actions:
+                    st.markdown("<div style='margin-top:15px;'></div>", unsafe_allow_html=True)
+                    
+                    # Pulsante Modifica (Apre un popover a comparsa pulito)
+                    with st.popover("⚙ EDIT VALUE"):
+                        new_name = st.text_input("Modifica Nome Conto", value=acc, key=f"edit_n_{row_id}")
+                        new_curr = st.selectbox("Modifica Valuta", ["USD", "EUR", "USDT", "BTC", "ETH"], index=["USD", "EUR", "USDT", "BTC", "ETH"].index(curr), key=f"edit_c_{row_id}")
+                        new_bal = st.number_input("Ricalibra Saldo Iniziale", min_value=0.0, value=init_val, key=f"edit_b_{row_id}")
+                        
+                        if st.button("SAVE CHANGES", key=f"save_{row_id}"):
+                            supabase.table("balances").update({
+                                "account_name": new_name, "currency": new_curr, "initial_balance": new_bal
+                            }).eq("id", row_id).execute()
+                            st.rerun()
+                    
+                    # Pulsante Rimozione Diretto
+                    if st.button("❌ REMOVE VAULT", key=f"del_{row_id}"):
+                        supabase.table("balances").delete().eq("id", row_id).execute()
+                        st.rerun()
+                st.markdown("---")
+    else: st.info("Nessun conto configurato. Usa il form in alto per inizializzare il tuo portafoglio.")
