@@ -18,7 +18,7 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS FLOWAY CORE INTERFACE (CLEAN MONOSPACE STANDARDS) ---
+# --- 2. CSS FLOWAY CORE INTERFACE ---
 st.markdown("""
     <style>
         /* Layout & Sfondi Nativi Terminale - Spaziatura Rigida e Leggibile */
@@ -36,12 +36,12 @@ st.markdown("""
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 0px; margin-bottom: 10px; }
         .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         
-        /* Pulsanti Laterali Giallo Terminale */
+        /* Pulsanti Laterali Giallo Terminale Minimale */
         div.stButton > button {
             background-color: #111111 !important; color: #FFD700 !important; border: 1px solid #333333 !important;
-            border-radius: 0px !important; padding: 4px 14px !important; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important;
+            border-radius: 0px !important; padding: 6px 14px !important; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important;
             font-size: 11px !important; text-transform: uppercase !important; font-weight: bold; width: 100%; text-align: left;
-            transition: all 0.15s ease-in-out !important;
+            transition: all 0.15s ease-in-out !important; letter-spacing: 1px;
         }
         div.stButton > button:hover { 
             border-color: #FFFF00 !important; 
@@ -72,16 +72,16 @@ def get_data(table):
 trades = get_data("trades")
 balances = get_data("balances")
 
-# --- 4. NAVIGAZIONE ---
+# --- 4. NAVIGAZIONE CRUDA ---
 if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
 with st.sidebar:
     st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:20px; padding-left:10px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
-    st.button("<GO> 1 . DASHBOARD", on_click=set_page, args=('DASHBOARD',))
-    st.button("<GO> 2 . BLOTTER", on_click=set_page, args=('BLOTTER',))
-    st.button("<GO> 3 . CALENDAR", on_click=set_page, args=('CALENDAR',))
-    st.button("<GO> 4 . VAULTS", on_click=set_page, args=('VAULTS',))
+    st.button("DASHBOARD", on_click=set_page, args=('DASHBOARD',))
+    st.button("BLOTTER", on_click=set_page, args=('BLOTTER',))
+    st.button("CALENDAR", on_click=set_page, args=('CALENDAR',))
+    st.button("VAULTS", on_click=set_page, args=('VAULTS',))
 
 # --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
@@ -132,7 +132,7 @@ elif st.session_state.page == 'BLOTTER':
                 acc_choice = c8.selectbox("ASSIGN TO VAULT", valid_accounts)
                 curr_choice = c9.selectbox("SET TRADING CURRENCY", valid_currencies)
 
-                if st.form_submit_button("TRANSMIT ORDER <GO>"):
+                if st.form_submit_button("TRANSMIT ORDER"):
                     status = "CHIUSA" if exit_p > 0 else "APERTA"
                     cost = round((entry_p * qty) / lev, 2)
                     pnl = round(((exit_p - entry_p) * qty * (1 if side == "LONG" else -1)), 2) if exit_p > 0 else 0
@@ -178,7 +178,7 @@ elif st.session_state.page == 'BLOTTER':
             key="bloomberg_ledger_v27"
         )
         
-        if st.button("COMMIT_CHANGES <GO>"):
+        if st.button("COMMIT_CHANGES"):
             ids_originali = set(trades['id'].astype(int))
             edited_clean = edited.dropna(subset=['id'])
             ids_rimasti = set(edited_clean['id'].astype(int))
