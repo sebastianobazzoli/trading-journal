@@ -66,20 +66,20 @@ def get_data(table):
 trades = get_data("trades")
 balances = get_data("balances")
 
-# --- 4. NAVIGAZIONE ---
+# --- 4. NAVIGAZIONE (NOMENCLATURA MINIMALE) ---
 if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
 with st.sidebar:
     st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:20px; padding-left:10px; letter-spacing:1px;'>FLOWAY // OS</div>", unsafe_allow_html=True)
-    st.button("<GO> 1 . MONITOR_DASHBOARD", on_click=set_page, args=('DASHBOARD',))
-    st.button("<GO> 2 . TRADE_EXECUTION_LOG", on_click=set_page, args=('TRADE',))
-    st.button("<GO> 3 . PERFORMANCE_HEATMAP", on_click=set_page, args=('HEATMAP',))
-    st.button("<GO> 4 . SYSTEM_SETTINGS_VAULT", on_click=set_page, args=('SETTINGS',))
+    st.button("<GO> 1 . DASHBOARD", on_click=set_page, args=('DASHBOARD',))
+    st.button("<GO> 2 . BLOTTER", on_click=set_page, args=('BLOTTER',))
+    st.button("<GO> 3 . CALENDAR", on_click=set_page, args=('CALENDAR',))
+    st.button("<GO> 4 . VAULTS", on_click=set_page, args=('VAULTS',))
 
 # --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
-    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_MONITOR_DASHBOARD</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px;'>/ DASHBOARD</h2>", unsafe_allow_html=True)
     if not balances.empty:
         st.markdown("<div class='ticker-label'>GLOBAL_LIQUIDITY_RESERVES (AGGREGATED BY CURRENCY)</div>", unsafe_allow_html=True)
         global_curr = balances['currency'].unique()
@@ -107,11 +107,11 @@ if st.session_state.page == 'DASHBOARD':
                         <div class='stat-sub' style='margin-top:6px;'>Available Liquidity: <span style='color:#FFFF00;'>{total_liq:,.2f}</span></div>
                     </div>
                 """, unsafe_allow_html=True)
-    else: st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS.")
+    else: st.warning("Inizializza i tuoi conti nella sezione VAULTS.")
 
-# --- 6. PAGINA: TRADE EXECUTION ---
-elif st.session_state.page == 'TRADE':
-    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_EXECUTION_BLOTTER</h2>", unsafe_allow_html=True)
+# --- 6. PAGINA: BLOTTER (EX TRADE EXECUTION) ---
+elif st.session_state.page == 'BLOTTER':
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px;'>/ TRADING_BLOTTER</h2>", unsafe_allow_html=True)
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
 
     with st.expander("📝 EXECUTE_NEW_ORDER_TICKET", expanded=False):
@@ -138,7 +138,7 @@ elif st.session_state.page == 'TRADE':
                         "portfolio": acc_choice, "currency": curr_choice, "instrument": "Stock"
                     }).execute()
                     st.rerun()
-        else: st.error("SISTEMA BLOCCATO: Inizializza almeno un conto Vault nei Settings.")
+        else: st.error("SISTEMA BLOCCATO: Inizializza almeno un conto nei VAULTS.")
 
     if not trades.empty:
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost', 'leverage']:
@@ -151,7 +151,7 @@ elif st.session_state.page == 'TRADE':
         column_order = ['id', 'asset', 'side', 'shares', 'entry_price', 'exit_price', 'date', 'close_date', 'leverage', 'portfolio', 'currency', 'cost', 'P&L_MARK', '%_MARK', 'STATO_MARK']
         display_trades = trades[[col for col in column_order if col in trades.columns]].sort_values("id", ascending=False)
 
-        st.markdown("<div class='ticker-label'>ACTIVE_LEDGER_BLOTTER (DOUBLE CLICK TO EDIT ANY CELL // SELECT & PRESS DEL TO REMOVE)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='ticker-label'>ACTIVE_BLOTTER_LEDGER (DOUBLE CLICK CELL TO EDIT // SELECT ROW & PRESS DEL TO REMOVE)</div>", unsafe_allow_html=True)
         
         edited = st.data_editor(
             display_trades, use_container_width=True, hide_index=True, num_rows="dynamic", 
@@ -200,9 +200,9 @@ elif st.session_state.page == 'TRADE':
                 }).eq("id", int(r['id'])).execute()
             st.rerun()
 
-# --- 7. PAGINA: PERFORMANCE HEATMAP (ADAPTIVE SYSTEM PATCH) ---
-elif st.session_state.page == 'HEATMAP':
-    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_PERFORMANCE_HEATMAP</h2>", unsafe_allow_html=True)
+# --- 7. PAGINA: CALENDAR (EX HEATMAP) ---
+elif st.session_state.page == 'CALENDAR':
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px;'>/ PERFORMANCE_CALENDAR</h2>", unsafe_allow_html=True)
     if not trades.empty:
         time_df = trades[(trades['status'] == 'CHIUSA') & (trades['close_date'].notna())].copy()
         if not time_df.empty:
@@ -217,7 +217,6 @@ elif st.session_state.page == 'HEATMAP':
             months_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
             all_days = list(range(1, 32))
 
-            # --- Matrice 1: Giornaliera (Adattiva e Dominante) ---
             st.markdown("<div class='ticker-label'>DAILY_OPERATIONAL_MATRIX // FULL YEAR ACCUMULATED PROFILE</div>", unsafe_allow_html=True)
             current_year = datetime.date.today().year
             daily_df = time_df[time_df['year'] == current_year]
@@ -227,18 +226,11 @@ elif st.session_state.page == 'HEATMAP':
             pivot_assets = daily_agg.pivot(index='month_name', columns='day', values='assets_list').reindex(index=months_order, columns=all_days).fillna("None")
 
             fig_daily = go.Figure(data=go.Heatmap(z=pivot_daily.values, x=pivot_daily.columns, y=pivot_daily.index, colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>MESE:</b> %{y}<br><b>GIORNO:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_trades.values, pivot_assets.values))))
-            
-            # FIX ADATTIVO GIORNALIERA: Rimosso height fisso, usiamo l'aspect ratio (widescreen disteso)
-            fig_daily.update_layout(
-                autosize=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                font=dict(family="Roboto Mono", color="#D5D5D5", size=10), 
-                margin=dict(l=50, r=10, t=10, b=30)
-            )
+            fig_daily.update_layout(autosize=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
             fig_daily.update_xaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             fig_daily.update_yaxes(gridcolor='#222222')
             st.plotly_chart(fig_daily, use_container_width=True)
 
-            # --- Matrice 2: Annuale (Adattiva e Più Piccola) ---
             st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY COMPACT HISTORICAL SUMMARY</div>", unsafe_allow_html=True)
             yearly_agg = time_df.groupby(['year', 'month_name']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
             unique_years = sorted(time_df['year'].unique())
@@ -247,21 +239,15 @@ elif st.session_state.page == 'HEATMAP':
             pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(index=unique_years, columns=months_order).fillna("None")
 
             fig_yearly = go.Figure(data=go.Heatmap(z=pivot_yearly.values, x=pivot_yearly.columns, y=pivot_yearly.index, colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))))
-            
-            # FIX ADATTIVO MENSILE: Profilo ad altezza ridotta per mantenere la proporzione gerarchica più compatta
-            fig_yearly.update_layout(
-                autosize=True, height=180, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                font=dict(family="Roboto Mono", color="#D5D5D5", size=10), 
-                margin=dict(l=50, r=10, t=10, b=30)
-            )
+            fig_yearly.update_layout(autosize=True, height=180, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
             fig_yearly.update_xaxes(gridcolor='#222222')
             fig_yearly.update_yaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             st.plotly_chart(fig_yearly, use_container_width=True)
         else: st.info("Nessuna operazione consolidata disponibile.")
 
-# --- 8. PAGINA: SYSTEM SETTINGS ---
-elif st.session_state.page == 'SETTINGS':
-    st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ FLOWAY_SETTINGS_VAULT</h2>", unsafe_allow_html=True)
+# --- 8. PAGINA: VAULTS (EX SYSTEM SETTINGS) ---
+elif st.session_state.page == 'VAULTS':
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px;'>/ VAULTS_MANAGEMENT</h2>", unsafe_allow_html=True)
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
