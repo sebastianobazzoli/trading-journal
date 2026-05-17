@@ -102,34 +102,31 @@ elif st.session_state.page == 'TRADE':
             st.error("ERRORE DI SISTEMA: Crea prima un conto in SYSTEM_SETTINGS.")
 
     if not trades.empty:
-        # Pulizia forzata per i calcoli numerici
+        # Conversione e pulizia dati numerici
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
             if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
-        # FUNZIONE COLORE CORRETTA E BLINDATA
-        def style_ledger(df):
-            s = pd.DataFrame('', index=df.index, columns=df.columns)
-            
-            # Profitto (P&L) in MAGENTA se diverso da zero
-            if 'profit' in df.columns:
-                s['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF;' if float(x) != 0 else '')
-            
-            # Rendimento (%) in VERDE se > 0, ROSSO se < 0
-            if 'pnl_perc' in df.columns:
-                s['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41;' if float(x) > 0 else ('color: #FF3131;' if float(x) < 0 else ''))
-            
-            # Stato in VERDE se APERTA, Grigio Scuro se CHIUSA
-            if 'status' in df.columns:
-                s['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: 700;' if x == "APERTA" else 'color: #555555;')
-                
-            return s
+        # Creazione colonne stringa formattate con indicatori per aggirare il blocco CSS di st.data_editor
+        trades['P&L'] = trades['profit'].apply(lambda x: f"◼ {x:,.2f}" if x == 0 else (f"▲ {x:,.2f}" if x > 0 else f"▼ {x:,.2f}"))
+        trades['%'] = trades['pnl_perc'].apply(lambda x: f"◼ {x:,.2f}%" if x == 0 else (f"▲ {x:,.2f}%" if x > 0 else f"▼ {x:,.2f}%"))
+        trades['STATO'] = trades['status'].apply(lambda x: f"⌾ {x}" if x == "APERTA" else f"• {x}")
+
+        # Ordinamento colonne desiderato per affiancare P&L e % alla fine del blocco dati
+        column_order = [
+            'id', 'asset', 'side', 'shares', 'entry_price', 'exit_price', 
+            'leverage', 'cost', 'portfolio', 'currency', 'P&L', '%', 'STATO'
+        ]
+        # Teniamo solo le colonne esistenti basandoci sull'ordine stabilito
+        display_trades = trades[[col for col in column_order if col in trades.columns]]
+        display_trades = display_trades.sort_values("STATO", ascending=False)
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
         
-        # Generazione Tabella con formattazione e stili applicati
+        # Tabella di controllo con P&L e % affiancate
         edited = st.data_editor(
-            trades.sort_values("status", ascending=False) if 'status' in trades.columns else trades,
-            use_container_width=True, hide_index=True, disabled=["id", "cost", "profit", "pnl_perc", "status"],
+            display_trades,
+            use_container_width=True, hide_index=True, 
+            disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"],
             column_config={
                 "id": None, 
                 "asset": "TKR", 
@@ -137,13 +134,15 @@ elif st.session_state.page == 'TRADE':
                 "shares": st.column_config.NumberColumn("QTY", format="%.2f"), 
                 "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), 
                 "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), 
+                "leverage": "LEV",
                 "cost": st.column_config.NumberColumn("COST", format="%.2f"), 
-                "profit": st.column_config.NumberColumn("P&L", format="%.2f"), 
-                "pnl_perc": st.column_config.NumberColumn("%", format="%.2f%%"), 
-                "status": st.column_config.TextColumn("STATO", width=80), 
-                "portfolio": st.column_config.SelectboxColumn("CONTO", options=valid_accounts, width=90)
+                "portfolio": "CONTO",
+                "currency": "VAL",
+                "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), 
+                "%": st.column_config.TextColumn("RENDIMENTO", width=95), 
+                "STATO": st.column_config.TextColumn("STATO", width=90)
             },
-            key="ledger_v15"
+            key="ledger_v16"
         )
         
         if st.button("SYNCHRONIZE"):
@@ -158,9 +157,21 @@ elif st.session_state.page == 'TRADE':
                 ids_del = set(trades['id']) - set(edited['id'])
                 for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
                 for _, r in edited.iterrows():
-                    p_out, p_in, q, c = float(r['exit_price']), float(r['entry_price']), float(r['shares']), float(r['cost'])
+                    p_out, p_in, q = float(r['exit_price']), float(r['entry_price']), float(r['shares'])
+                    # Recuperiamo la leva originale dal dataframe trades originale per il calcolo
+                    original_row = trades[trades['id'] == r['id']]
+                    lev_val = float(original_row['leverage'].values[0]) if not original_row.empty else 1.0
+                    
+                    c = round((p_in * q) / lev_val, 2)
                     pnl = round(((p_out - p_in) * q * (1 if r['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
-                    supabase.table("trades").update({"exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA", "portfolio": r['portfolio'], "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0}).eq("id", r['id']).execute()
+                    supabase.table("trades").update({
+                        "exit_price": p_out, 
+                        "status": "CHIUSA" if p_out > 0 else "APERTA", 
+                        "portfolio": r['portfolio'], 
+                        "cost": c,
+                        "profit": pnl, 
+                        "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0
+                    }).eq("id", r['id']).execute()
                 st.rerun()
 
 # --- 7. PAGINA: SETTINGS ---
