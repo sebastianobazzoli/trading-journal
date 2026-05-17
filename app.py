@@ -8,7 +8,7 @@ from supabase import create_client
 # --- 1. CONFIGURAZIONE & COSTANTI GLOBALI ---
 st.set_page_config(page_title="TERMINAL_X", layout="wide", initial_sidebar_state="expanded")
 
-# Dichiarazione globale delle valute accettate dal sistema
+# Costante globale valute
 valid_currencies = ["USD", "EUR", "USDT", "BTC", "ETH"]
 
 @st.cache_resource
@@ -18,7 +18,7 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS BLOOMBERG TERMINAL CORE (TRUE YELLOW PATCH) ---
+# --- 2. CSS BLOOMBERG TERMINAL CORE (AMBER HOVER PATCH) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
@@ -30,24 +30,27 @@ st.markdown("""
         
         /* Pannelli Stile Bloomberg */
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 2px; margin-bottom: 10px; }
-        
-        /* FIX: Colore Giallo Bloomberg Istituzionale per Etichette e Intestazioni */
         .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; }
         
-        /* Pulsanti Laterali con Testo Giallo Bloomberg */
+        /* Pulsanti Professionali - FIX HOVER GIALLO BLOOMBERG */
         div.stButton > button {
             background-color: #111111 !important; color: #FFD700 !important; border: 1px solid #333333 !important;
             border-radius: 0px !important; padding: 4px 14px !important; font-family: 'Roboto Mono', monospace !important;
             font-size: 11px !important; text-transform: uppercase !important; font-weight: bold; width: 100%; text-align: left;
+            transition: all 0.15s ease-in-out !important;
         }
-        div.stButton > button:hover { border-color: #00FF41 !important; color: #00FF41 !important; background-color: #071507 !important; }
+        div.stButton > button:hover { 
+            border-color: #FFFF00 !important; 
+            color: #FFFF00 !important; 
+            background-color: #1A1A1A !important; 
+            box-shadow: inset 0 0 4px rgba(255, 215, 0, 0.2) !important;
+        }
         
         /* Monitor Panel Card */
-        .card-title { color: #00FF41; font-weight: 700; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #222222; padding-bottom: 4px; text-transform: uppercase; }
+        .card-title { color: #FFD700; font-weight: 700; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #222222; padding-bottom: 4px; text-transform: uppercase; }
         .stat-val { font-size: 20px; font-weight: 700; color: #FFFFFF; font-family: 'Roboto Mono', monospace; }
         .stat-sub { font-size: 9px; color: #666666; text-transform: uppercase; font-weight: bold; }
         
-        /* Integrazione estetica griglia dati */
         div[data-testid="stDataEditor"] { background-color: #050505 !important; border: 1px solid #222222 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -98,10 +101,10 @@ if st.session_state.page == 'DASHBOARD':
             with g_cols[idx]:
                 st.markdown(f"""
                     <div class='panel'>
-                        <div class='card-title' style='color:#FFD700;'>TOTAL {curr_str}</div>
+                        <div class='card-title'>TOTAL {curr_str}</div>
                         <div class='stat-sub'>Aggregated Equity Portfolio</div>
                         <div class='stat-val'>{total_vault:,.2f}</div>
-                        <div class='stat-sub' style='margin-top:6px;'>Available Liquidity: <span style='color:#00FF41;'>{total_liq:,.2f}</span></div>
+                        <div class='stat-sub' style='margin-top:6px;'>Available Liquidity: <span style='color:#FFFF00;'>{total_liq:,.2f}</span></div>
                     </div>
                 """, unsafe_allow_html=True)
     else: st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS.")
@@ -109,7 +112,6 @@ if st.session_state.page == 'DASHBOARD':
 # --- 6. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
     st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ BBG_EXECUTION_BLOTTER</h2>", unsafe_allow_html=True)
-    
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
 
     with st.expander("📝 EXECUTE_NEW_ORDER_TICKET", expanded=False):
@@ -155,21 +157,17 @@ elif st.session_state.page == 'TRADE':
             display_trades, use_container_width=True, hide_index=True, num_rows="dynamic", 
             disabled=["id", "cost", "P&L_MARK", "%_MARK", "STATO_MARK"], 
             column_config={
-                "id": None, 
-                "asset": st.column_config.TextColumn("TICKER", required=True), 
+                "id": None, "asset": st.column_config.TextColumn("TICKER", required=True), 
                 "side": st.column_config.SelectboxColumn("S", options=["LONG", "SHORT"], required=True, width=70), 
                 "shares": st.column_config.NumberColumn("QTY", format="%.2f", min_value=0.0), 
                 "entry_price": st.column_config.NumberColumn("IN", format="%.2f", min_value=0.0), 
                 "exit_price": st.column_config.NumberColumn("OUT", format="%.2f", min_value=0.0), 
-                "date": st.column_config.TextColumn("OPEN DATE"), 
-                "close_date": st.column_config.TextColumn("CLOSE DATE"), 
+                "date": st.column_config.TextColumn("OPEN DATE"), "close_date": st.column_config.TextColumn("CLOSE DATE"), 
                 "leverage": st.column_config.NumberColumn("LEV", format="%d", min_value=1), 
                 "portfolio": st.column_config.SelectboxColumn("CONTO", options=valid_accounts, required=True, width=110), 
                 "currency": st.column_config.SelectboxColumn("VALUTA", options=valid_currencies, required=True, width=80), 
                 "cost": st.column_config.NumberColumn("COST", format="%.2f"), 
-                "P&L_MARK": st.column_config.TextColumn("P&L (REAL)", width=110), 
-                "%_MARK": st.column_config.TextColumn("RENDIMENTO", width=100), 
-                "STATO_MARK": st.column_config.TextColumn("STATO", width=95)
+                "P&L_MARK": st.column_config.TextColumn("P&L (REAL)", width=110), "%_MARK": st.column_config.TextColumn("RENDIMENTO", width=100), "STATO_MARK": st.column_config.TextColumn("STATO", width=95)
             }, 
             key="bloomberg_ledger_v27"
         )
@@ -180,8 +178,7 @@ elif st.session_state.page == 'TRADE':
             ids_rimasti = set(edited_clean['id'].astype(int))
             
             ids_da_cancellare = ids_originali - ids_rimasti
-            for d_id in ids_da_cancellare: 
-                supabase.table("trades").delete().eq("id", d_id).execute()
+            for d_id in ids_da_cancellare: supabase.table("trades").delete().eq("id", d_id).execute()
             
             for _, r in edited_clean.iterrows():
                 p_out = float(r['exit_price']) if pd.notna(r['exit_price']) else 0.0
@@ -191,12 +188,9 @@ elif st.session_state.page == 'TRADE':
                 
                 c = round((p_in * q) / lev_val, 2)
                 pnl = round(((p_out - p_in) * q * (1 if r['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
-                
                 c_date = r['close_date']
-                if p_out > 0 and (pd.isna(c_date) or str(c_date).strip() == "" or c_date == "None"): 
-                    c_date = str(datetime.date.today())
-                elif p_out == 0: 
-                    c_date = None
+                if p_out > 0 and (pd.isna(c_date) or str(c_date).strip() == "" or c_date == "None"): c_date = str(datetime.date.today())
+                elif p_out == 0: c_date = None
                 
                 supabase.table("trades").update({
                     "asset": str(r['asset']).upper(), "side": r['side'], "shares": q, "entry_price": p_in, "exit_price": p_out,
@@ -204,7 +198,6 @@ elif st.session_state.page == 'TRADE':
                     "portfolio": r['portfolio'], "currency": r['currency'], "leverage": lev_val, "cost": c, "profit": pnl, 
                     "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0
                 }).eq("id", int(r['id'])).execute()
-                
             st.rerun()
 
 # --- 7. PAGINA: PERFORMANCE HEATMAP ---
@@ -224,7 +217,6 @@ elif st.session_state.page == 'HEATMAP':
             months_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
             all_days = list(range(1, 32))
 
-            # --- Matrice 1: Giornaliera ---
             st.markdown("<div class='ticker-label'>DAILY_OPERATIONAL_MATRIX // GRID_SYSTEM</div>", unsafe_allow_html=True)
             current_year = datetime.date.today().year
             daily_df = time_df[time_df['year'] == current_year]
@@ -239,7 +231,6 @@ elif st.session_state.page == 'HEATMAP':
             fig_daily.update_yaxes(gridcolor='#222222')
             st.plotly_chart(fig_daily, use_container_width=True)
 
-            # --- Matrice 2: Annuale ---
             st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY HISTORICAL SUMMARY</div>", unsafe_allow_html=True)
             yearly_agg = time_df.groupby(['year', 'month_name']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
             unique_years = sorted(time_df['year'].unique())
@@ -290,12 +281,12 @@ elif st.session_state.page == 'SETTINGS':
                             <div class='card-title'>{acc.upper()} // <span style='color:#666;'>{curr}</span></div>
                             <div class='total-label' style='font-size:9px; color:#666; text-transform:uppercase; font-weight:bold;'>Total Equity Balance</div>
                             <div class='stat-val'>{total_bal:,.2f}</div>
-                            <div class='stat-sub' style='margin-top:10px;'>Free Cash Liquidity: <span style='color:#00FF41;'>{liq:,.2f}</span></div>
+                            <div class='stat-sub' style='margin-top:10px;'>Free Cash Liquidity: <span style='color:#FFFF00;'>{liq:,.2f}</span></div>
                         </div>
                     """, unsafe_allow_html=True)
                 
                 with c_chart:
-                    fig = px.pie(pd.DataFrame({"Cat": ["Cash", "Margin Locked"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Cash": "#00FF41", "Margin Locked": "#222"})
+                    fig = px.pie(pd.DataFrame({"Cat": ["Cash", "Margin Locked"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Cash": "#FFFF00", "Margin Locked": "#222"})
                     fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=110, margin=dict(l=0, r=0, t=0, b=0))
                     st.plotly_chart(fig, use_container_width=True, key=f"chart_{row_id}")
                 
