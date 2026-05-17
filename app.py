@@ -18,7 +18,7 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS FLOWAY CORE INTERFACE ---
+# --- 2. CSS FLOWAY CORE INTERFACE (SYMMETRIC NAV PATCH) ---
 st.markdown("""
     <style>
         /* Layout & Sfondi Nativi Terminale - Spaziatura Rigida e Leggibile */
@@ -36,18 +36,31 @@ st.markdown("""
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 0px; margin-bottom: 10px; }
         .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         
-        /* Pulsanti Laterali Giallo Terminale Minimale */
-        div.stButton > button {
-            background-color: #111111 !important; color: #FFD700 !important; border: 1px solid #333333 !important;
-            border-radius: 0px !important; padding: 6px 14px !important; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important;
-            font-size: 11px !important; text-transform: uppercase !important; font-weight: bold; width: 100%; text-align: left;
-            transition: all 0.15s ease-in-out !important; letter-spacing: 1px;
+        /* RE-DESIGN PULSANTI SIDEBAR: SIMMETRICI, IDENTICI E SENZA BORDI INUTILI */
+        div.stSidebar div.stButton > button {
+            background-color: #0A0A0A !important; 
+            color: #888888 !important; 
+            border: none !important;
+            border-left: 3px solid transparent !important;
+            border-radius: 0px !important; 
+            padding: 0px 15px !important; 
+            height: 38px !important;
+            line-height: 38px !important;
+            font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important;
+            font-size: 11px !important; 
+            text-transform: uppercase !important; 
+            font-weight: bold !important; 
+            width: 100% !important; 
+            text-align: left !important;
+            transition: all 0.15s ease-in-out !important; 
+            letter-spacing: 1.5px !important;
         }
-        div.stButton > button:hover { 
-            border-color: #FFFF00 !important; 
+        
+        /* Effetto Hover Istituzionale: Si illumina di Giallo Ambra e crea la linea di focus */
+        div.stSidebar div.stButton > button:hover { 
             color: #FFFF00 !important; 
-            background-color: #1A1A1A !important; 
-            box-shadow: inset 0 0 4px rgba(255, 215, 0, 0.3) !important;
+            background-color: #141414 !important; 
+            border-left: 3px solid #FFFF00 !important;
         }
         
         /* Monitor Panel Card */
@@ -72,12 +85,12 @@ def get_data(table):
 trades = get_data("trades")
 balances = get_data("balances")
 
-# --- 4. NAVIGAZIONE CRUDA ---
+# --- 4. NAVIGAZIONE ---
 if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
 with st.sidebar:
-    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:20px; padding-left:10px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:25px; padding-left:15px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
     st.button("DASHBOARD", on_click=set_page, args=('DASHBOARD',))
     st.button("BLOTTER", on_click=set_page, args=('BLOTTER',))
     st.button("CALENDAR", on_click=set_page, args=('CALENDAR',))
