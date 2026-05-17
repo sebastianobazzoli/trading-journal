@@ -18,21 +18,20 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS FLOWAY CORE INTERFACE ---
+# --- 2. CSS FLOWAY CORE INTERFACE (MACOS TERMINAL RAW FONT PATCH) ---
 st.markdown("""
     <style>
-        /* Sostituzione globale con i font nativi dei terminali finanziari e operativi */
-        @font-face {
-            font-family: 'TerminalFont';
-            font-style: normal;
+        /* Definizione ordine font per simulare il terminale puro di macOS */
+        #floway-font-stack {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace !important;
         }
         
-        /* Layout & Sfondi Nativi Terminale - Gerarchia Monospazio Rigida */
+        /* Layout & Sfondi Nativi Terminale - Spaziatura Rigida */
         .block-container { padding-top: 2rem !important; padding-left: 1rem !important; padding-right: 1rem !important; max-width: 100% !important; }
         
         html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] { 
             background-color: #000000 !important; 
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important; 
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace !important; 
             color: #D5D5D5; 
         }
         
@@ -40,12 +39,12 @@ st.markdown("""
         
         /* Pannelli Stile Floway */
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 0px; margin-bottom: 10px; }
-        .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important; }
+        .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'SF Mono', 'Monaco', 'Menlo', monospace !important; }
         
         /* Pulsanti Laterali Giallo Terminale */
         div.stButton > button {
             background-color: #111111 !important; color: #FFD700 !important; border: 1px solid #333333 !important;
-            border-radius: 0px !important; padding: 4px 14px !important; font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+            border-radius: 0px !important; padding: 4px 14px !important; font-family: 'SF Mono', 'Monaco', 'Menlo', monospace !important;
             font-size: 11px !important; text-transform: uppercase !important; font-weight: bold; width: 100%; text-align: left;
             transition: all 0.15s ease-in-out !important;
         }
@@ -57,12 +56,12 @@ st.markdown("""
         }
         
         /* Monitor Panel Card */
-        .card-title { color: #FFD700; font-weight: 700; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #222222; padding-bottom: 4px; text-transform: uppercase; font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important; }
-        .stat-val { font-size: 20px; font-weight: 700; color: #FFFFFF; font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important; }
-        .stat-sub { font-size: 9px; color: #666666; text-transform: uppercase; font-weight: bold; font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important; }
+        .card-title { color: #FFD700; font-weight: 700; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #222222; padding-bottom: 4px; text-transform: uppercase; font-family: 'SF Mono', 'Monaco', 'Menlo', monospace !important; }
+        .stat-val { font-size: 20px; font-weight: 700; color: #FFFFFF; font-family: 'SF Mono', 'Monaco', 'Menlo', monospace !important; }
+        .stat-sub { font-size: 9px; color: #666666; text-transform: uppercase; font-weight: bold; font-family: 'SF Mono', 'Monaco', 'Menlo', monospace !important; }
         
-        /* Forza l'allineamento dei caratteri all'interno del data editor di Streamlit */
-        div[data-testid="stDataEditor"] * { font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important; }
+        /* Forza l'allineamento dei caratteri all'interno del data editor di Streamlit con la nuova gerarchia macOS */
+        div[data-testid="stDataEditor"] * { font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace !important; }
         div[data-testid="stDataEditor"] { background-color: #050505 !important; border: 1px solid #222222 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -83,7 +82,7 @@ if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
 with st.sidebar:
-    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:20px; padding-left:10px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:20px; padding-left:10px; letter-spacing:1px; font-family:\'SF Mono\', Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
     st.button("<GO> 1 . DASHBOARD", on_click=set_page, args=('DASHBOARD',))
     st.button("<GO> 2 . BLOTTER", on_click=set_page, args=('BLOTTER',))
     st.button("<GO> 3 . CALENDAR", on_click=set_page, args=('CALENDAR',))
@@ -91,7 +90,7 @@ with st.sidebar:
 
 # --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
-    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ DASHBOARD</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:\'SF Mono\', Monaco, monospace;'>/ DASHBOARD</h2>", unsafe_allow_html=True)
     if not balances.empty:
         st.markdown("<div class='ticker-label'>GLOBAL_LIQUIDITY_RESERVES (AGGREGATED BY CURRENCY)</div>", unsafe_allow_html=True)
         global_curr = balances['currency'].unique()
@@ -123,7 +122,7 @@ if st.session_state.page == 'DASHBOARD':
 
 # --- 6. PAGINA: BLOTTER ---
 elif st.session_state.page == 'BLOTTER':
-    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ TRADING_BLOTTER</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:\'SF Mono\', Monaco, monospace;'>/ TRADING_BLOTTER</h2>", unsafe_allow_html=True)
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
 
     with st.expander("[NEW_ORDER_TICKET]", expanded=False):
@@ -214,7 +213,7 @@ elif st.session_state.page == 'BLOTTER':
 
 # --- 7. PAGINA: CALENDAR ---
 elif st.session_state.page == 'CALENDAR':
-    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ PERFORMANCE_CALENDAR</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:\'SF Mono\', Monaco, monospace;'>/ PERFORMANCE_CALENDAR</h2>", unsafe_allow_html=True)
     if not trades.empty:
         time_df = trades[(trades['status'] == 'CHIUSA') & (trades['close_date'].notna())].copy()
         if not time_df.empty:
@@ -237,7 +236,6 @@ elif st.session_state.page == 'CALENDAR':
             pivot_trades = daily_agg.pivot(index='month_name', columns='day', values='num_trades').reindex(index=months_order, columns=all_days).fillna(0)
             pivot_assets = daily_agg.pivot(index='month_name', columns='day', values='assets_list').reindex(index=months_order, columns=all_days).fillna("None")
 
-            # FIX: Corretto l'annidamento dell'array colorscale (rimosse le parentesi triple errate)
             fig_daily = go.Figure(data=go.Heatmap(
                 z=pivot_daily.values, x=pivot_daily.columns, y=pivot_daily.index, 
                 colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], 
@@ -246,7 +244,8 @@ elif st.session_state.page == 'CALENDAR':
                 customdata=list(zip(pivot_trades.values, pivot_assets.values))
             ))
             
-            fig_daily.update_layout(autosize=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Consolas, Monaco, monospace", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
+            # Patch font interno di Plotly tarato sulla nuova gerarchia macOS Terminal
+            fig_daily.update_layout(autosize=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="'SF Mono', 'Monaco', 'Menlo', monospace", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
             fig_daily.update_xaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             fig_daily.update_yaxes(gridcolor='#222222')
             st.plotly_chart(fig_daily, use_container_width=True)
@@ -259,7 +258,7 @@ elif st.session_state.page == 'CALENDAR':
             pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(index=unique_years, columns=months_order).fillna("None")
 
             fig_yearly = go.Figure(data=go.Heatmap(z=pivot_yearly.values, x=pivot_yearly.columns, y=pivot_yearly.index, colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))))
-            fig_yearly.update_layout(autosize=True, height=180, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Consolas, Monaco, monospace", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
+            fig_yearly.update_layout(autosize=True, height=180, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="'SF Mono', 'Monaco', 'Menlo', monospace", color="#D5D5D5", size=10), margin=dict(l=50, r=10, t=10, b=30))
             fig_yearly.update_xaxes(gridcolor='#222222')
             fig_yearly.update_yaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             st.plotly_chart(fig_yearly, use_container_width=True)
@@ -267,7 +266,7 @@ elif st.session_state.page == 'CALENDAR':
 
 # --- 8. PAGINA: VAULTS ---
 elif st.session_state.page == 'VAULTS':
-    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:Consolas, Monaco, monospace;'>/ VAULTS_MANAGEMENT</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFF; font-size:18px; margin-bottom:15px; font-family:\'SF Mono\', Monaco, monospace;'>/ VAULTS_MANAGEMENT</h2>", unsafe_allow_html=True)
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
