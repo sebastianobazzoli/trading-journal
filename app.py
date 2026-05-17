@@ -69,7 +69,7 @@ if st.session_state.page == 'DASHBOARD':
     else:
         st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS per sbloccare la Dashboard globale.")
 
-# --- 6. TRADE EXECUTION (PRESERVATA TOTALMENTE) ---
+# --- 6. TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
@@ -102,22 +102,48 @@ elif st.session_state.page == 'TRADE':
             st.error("ERRORE DI SISTEMA: Crea prima un conto in SYSTEM_SETTINGS.")
 
     if not trades.empty:
+        # Pulizia forzata per i calcoli numerici
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
             if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
+        # FUNZIONE COLORE CORRETTA E BLINDATA
         def style_ledger(df):
             s = pd.DataFrame('', index=df.index, columns=df.columns)
-            if 'profit' in df.columns: s['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF' if float(x) != 0 else '')
-            if 'pnl_perc' in df.columns: s['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41' if float(x) > 0 else ('color: #FF3131' if float(x) < 0 else ''))
-            if 'status' in df.columns: s['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: bold' if x == "APERTA" else 'color: #555')
+            
+            # Profitto (P&L) in MAGENTA se diverso da zero
+            if 'profit' in df.columns:
+                s['profit'] = df['profit'].apply(lambda x: 'color: #FF00FF;' if float(x) != 0 else '')
+            
+            # Rendimento (%) in VERDE se > 0, ROSSO se < 0
+            if 'pnl_perc' in df.columns:
+                s['pnl_perc'] = df['pnl_perc'].apply(lambda x: 'color: #00FF41;' if float(x) > 0 else ('color: #FF3131;' if float(x) < 0 else ''))
+            
+            # Stato in VERDE se APERTA, Grigio Scuro se CHIUSA
+            if 'status' in df.columns:
+                s['status'] = df['status'].apply(lambda x: 'color: #00FF41; font-weight: 700;' if x == "APERTA" else 'color: #555555;')
+                
             return s
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
+        
+        # Generazione Tabella con formattazione e stili applicati
         edited = st.data_editor(
             trades.sort_values("status", ascending=False) if 'status' in trades.columns else trades,
             use_container_width=True, hide_index=True, disabled=["id", "cost", "profit", "pnl_perc", "status"],
-            column_config={"id": None, "asset": "TKR", "side": "S", "shares": "QTY", "entry_price": "IN", "exit_price": "OUT", "cost": "COST", "profit": "P&L", "pnl_perc": "%", "status": "STATO", "portfolio": st.column_config.SelectboxColumn("CONTO", options=valid_accounts, width=90)},
-            key="ledger_v14"
+            column_config={
+                "id": None, 
+                "asset": "TKR", 
+                "side": "S", 
+                "shares": st.column_config.NumberColumn("QTY", format="%.2f"), 
+                "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), 
+                "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), 
+                "cost": st.column_config.NumberColumn("COST", format="%.2f"), 
+                "profit": st.column_config.NumberColumn("P&L", format="%.2f"), 
+                "pnl_perc": st.column_config.NumberColumn("%", format="%.2f%%"), 
+                "status": st.column_config.TextColumn("STATO", width=80), 
+                "portfolio": st.column_config.SelectboxColumn("CONTO", options=valid_accounts, width=90)
+            },
+            key="ledger_v15"
         )
         
         if st.button("SYNCHRONIZE"):
@@ -137,7 +163,7 @@ elif st.session_state.page == 'TRADE':
                     supabase.table("trades").update({"exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA", "portfolio": r['portfolio'], "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0}).eq("id", r['id']).execute()
                 st.rerun()
 
-# --- 7. PAGINA: SETTINGS (POTENZIATA CON EDITING DIRETTO) ---
+# --- 7. PAGINA: SETTINGS ---
 elif st.session_state.page == 'SETTINGS':
     st.markdown("### / SYSTEM_SETTINGS")
     
@@ -154,14 +180,10 @@ elif st.session_state.page == 'SETTINGS':
         st.markdown("<div class='ticker-label'>VAULT_INSIGHTS & LIVE MANAGEMENT</div>", unsafe_allow_html=True)
         unique_accounts = balances['account_name'].unique()
         
-        # Generiamo i blocchi interattivi per ogni conto reale
         for acc in unique_accounts:
             acc_data = balances[balances['account_name'] == acc]
-            
-            # Contenitore principale per Conto
             with st.container():
                 c_info, c_chart = st.columns([1, 1.5])
-                
                 total_bal = 0
                 margin_used = 0
                 for _, r in acc_data.iterrows():
@@ -173,65 +195,21 @@ elif st.session_state.page == 'SETTINGS':
                 liq = total_bal - margin_used
                 
                 with c_info:
-                    st.markdown(f"""
-                        <div class='panel'>
-                            <div class='card-title'>{acc.upper()}</div>
-                            <div class='stat-sub'>Patrimonio Totale</div>
-                            <div class='stat-val'>{total_bal:,.2f}</div>
-                            <div class='stat-sub' style='margin-top:10px;'>Liquidità Disponibile: <span style='color:#00FF41;'>{liq:,.2f}</span></div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
+                    st.markdown(f"<div class='panel'><div class='card-title'>{acc.upper()}</div><div class='stat-sub'>Patrimonio Totale</div><div class='stat-val'>{total_bal:,.2f}</div><div class='stat-sub' style='margin-top:10px;'>Liquidità Disponibile: <span style='color:#00FF41;'>{liq:,.2f}</span></div></div>", unsafe_allow_html=True)
                 with c_chart:
                     fig = px.pie(pd.DataFrame({"Cat": ["Libero", "Impegnato"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Libero": "#00FF41", "Impegnato": "#222"})
                     fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=140, margin=dict(l=0,r=0,t=0,b=0))
                     st.plotly_chart(fig, use_container_width=True)
 
-        # SEZIONE MODIFICA STRUTTURALE (Sotto le Card)
         st.markdown("<br><div class='ticker-label'>CONSOLE_DI_MODIFICA_CONTI</div>", unsafe_allow_html=True)
-        
-        # La tabella permette di sovrascrivere o eliminare i conti passati
-        edited_bal = st.data_editor(
-            balances, 
-            use_container_width=True, 
-            hide_index=True, 
-            num_rows="dynamic",
-            column_config={
-                "id": None, 
-                "account_name": st.column_config.TextColumn("NOME CONTO", required=True), 
-                "currency": st.column_config.SelectboxColumn("VALUTA", options=["USD", "EUR", "USDT", "BTC", "ETH"], required=True), 
-                "initial_balance": st.column_config.NumberColumn("SALDO INIZIALE", format="%.2f", min_value=0.0)
-            },
-            key="secure_settings_editor"
-        )
-        
+        edited_bal = st.data_editor(balances, use_container_width=True, hide_index=True, num_rows="dynamic", column_config={"id": None, "account_name": st.column_config.TextColumn("NOME CONTO", required=True), "currency": st.column_config.SelectboxColumn("VALUTA", options=["USD", "EUR", "USDT", "BTC", "ETH"], required=True), "initial_balance": st.column_config.NumberColumn("SALDO INIZIALE", format="%.2f", min_value=0.0)}, key="secure_settings_editor")
         if st.button("SYNC_SETTINGS_DATA"):
             try:
-                # 1. Identifica ed elimina le righe rimosse dall'utente nell'editor
                 ids_originali = set(balances['id'])
                 ids_rimasti = set(edited_bal['id'].dropna())
-                ids_da_cancellare = ids_originali - ids_rimasti
-                
-                for d_id in ids_da_cancellare:
-                    supabase.table("balances").delete().eq("id", d_id).execute()
-                
-                # 2. Aggiorna o Inserisce le righe modificate/nuove
+                for d_id in (ids_originali - ids_rimasti): supabase.table("balances").delete().eq("id", d_id).execute()
                 for _, r in edited_bal.iterrows():
-                    if pd.isna(r['id']):
-                        # Se l'id manca, l'utente ha aggiunto una riga direttamente dalla tabella
-                        supabase.table("balances").insert({
-                            "account_name": r['account_name'], 
-                            "currency": r['currency'], 
-                            "initial_balance": r['initial_balance']
-                        }).execute()
-                    else:
-                        # Altrimenti aggiorna la riga esistente
-                        supabase.table("balances").update({
-                            "account_name": r['account_name'], 
-                            "currency": r['currency'], 
-                            "initial_balance": r['initial_balance']
-                        }).eq("id", r['id']).execute()
-                        
+                    if pd.isna(r['id']): supabase.table("balances").insert({"account_name": r['account_name'], "currency": r['currency'], "initial_balance": r['initial_balance']}).execute()
+                    else: supabase.table("balances").update({"account_name": r['account_name'], "currency": r['currency'], "initial_balance": r['initial_balance']}).eq("id", r['id']).execute()
                 st.rerun()
-            except Exception as e:
-                st.error(f"Errore durante l'aggiornamento dei conti: {e}")
+            except Exception as e: st.error(f"Errore: {e}")
