@@ -5,8 +5,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 from supabase import create_client
 
-# --- 1. CONFIGURAZIONE ---
+# --- 1. CONFIGURAZIONE & COSTANTI GLOBALI ---
 st.set_page_config(page_title="TERMINAL_X", layout="wide", initial_sidebar_state="expanded")
+
+# Dichiarazione globale per evitare NameError in qualsiasi pagina del terminale
+valid_currencies = ["USD", "EUR", "USDT", "BTC", "ETH"]
 
 @st.cache_resource
 def init_db():
@@ -18,7 +21,7 @@ supabase = init_db()
 # --- 2. CSS BLOOMBERG TERMINAL CORE ---
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght=400;700&display=swap');
         
         /* Layout & Sfondi */
         .block-container { padding-top: 2rem !important; padding-left: 1rem !important; padding-right: 1rem !important; max-width: 100% !important; }
@@ -27,7 +30,7 @@ st.markdown("""
         
         /* Pannelli Stile Bloomberg */
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 2px; margin-bottom: 10px; }
-        .ticker-label { color: #FF9900; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; border-left: 3px solid #FF9900; padding-left: 6px; }
+        .ticker-label { color: #FF9900; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FF9900; padding-left: 6px; }
         
         /* Pulsanti Professionali */
         div.stButton > button {
@@ -42,7 +45,6 @@ st.markdown("""
         .stat-val { font-size: 20px; font-weight: 700; color: #FFFFFF; font-family: 'Roboto Mono', monospace; }
         .stat-sub { font-size: 9px; color: #666666; text-transform: uppercase; font-weight: bold; }
         
-        /* Tabella Data Editor Customization via CSS Hack per Streamlit */
         div[data-testid="stDataEditor"] { background-color: #050505 !important; border: 1px solid #222222 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -58,7 +60,7 @@ def get_data(table):
 trades = get_data("trades")
 balances = get_data("balances")
 
-# --- 4. NAVIGAZIONE AMBIENTE ISTITUZIONALE ---
+# --- 4. NAVIGAZIONE ---
 if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
@@ -101,14 +103,12 @@ if st.session_state.page == 'DASHBOARD':
                 """, unsafe_allow_html=True)
     else: st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS.")
 
-# --- 6. PAGINA: TRADE EXECUTION (BLOOMBERG STYLE - FULL EDITABLE & REMOVABLE) ---
+# --- 6. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
     st.markdown("<h2 style='color:#FFF; font-size:20px; margin-bottom:15px;'>/ BBG_EXECUTION_BLOTTER</h2>", unsafe_allow_html=True)
     
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
-    valid_currencies = ["USD", "EUR", "USDT", "BTC", "ETH"]
 
-    # Immissione rapida in stile Order Ticket
     with st.expander("📝 EXECUTE_NEW_ORDER_TICKET", expanded=False):
         if valid_accounts:
             with st.form("trade_form", clear_on_submit=True):
@@ -136,22 +136,18 @@ elif st.session_state.page == 'TRADE':
         else: st.error("SISTEMA BLOCCATO: Inizializza almeno un conto Vault nei Settings.")
 
     if not trades.empty:
-        # Cast corretti preventivi per evitare anomalie grafiche
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost', 'leverage']:
             if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
-        # Generazione colonne calcolate dinamiche puramente visive (non modificabili)
         trades['P&L_MARK'] = trades['profit'].apply(lambda x: f"◼ {x:,.2f}" if x == 0 else (f"▲ {x:,.2f}" if x > 0 else f"▼ {x:,.2f}"))
         trades['%_MARK'] = trades['pnl_perc'].apply(lambda x: f"◼ {x:,.2f}%" if x == 0 else (f"▲ {x:,.2f}%" if x > 0 else f"▼ {x:,.2f}%"))
         trades['STATO_MARK'] = trades['status'].apply(lambda x: f"⌾ {x}" if x == "APERTA" else f"• {x}")
 
-        # Configurazione colonne per l'esposizione della griglia Bloomberg
         column_order = ['id', 'asset', 'side', 'shares', 'entry_price', 'exit_price', 'date', 'close_date', 'leverage', 'portfolio', 'currency', 'cost', 'P&L_MARK', '%_MARK', 'STATO_MARK']
         display_trades = trades[[col for col in column_order if col in trades.columns]].sort_values("id", ascending=False)
 
         st.markdown("<div class='ticker-label'>ACTIVE_LEDGER_BLOTTER (DOUBLE CLICK TO EDIT ANY CELL // SELECT & PRESS DEL TO REMOVE)</div>", unsafe_allow_html=True)
         
-        # INTERFACCIA TOTALMENTE MODIFICABILE E RIMOVIBILE (num_rows="dynamic")
         edited = st.data_editor(
             display_trades, use_container_width=True, hide_index=True, num_rows="dynamic", 
             disabled=["id", "cost", "P&L_MARK", "%_MARK", "STATO_MARK"], 
@@ -175,26 +171,21 @@ elif st.session_state.page == 'TRADE':
             key="bloomberg_ledger_v27"
         )
         
-        # Pulsante di salvataggio modifiche e cancellazioni strutturali
         if st.button("COMMIT_CHANGES <GO>"):
             ids_originali = set(trades['id'].astype(int))
-            # Gestione righe rimaste (esclude le righe rimosse dall'utente o inserite vuote dall'editor)
             edited_clean = edited.dropna(subset=['id'])
             ids_rimasti = set(edited_clean['id'].astype(int))
             
-            # 1. RIMOZIONE TRADES CANCELLATI DALLA TABELLA
             ids_da_cancellare = ids_originali - ids_rimasti
             for d_id in ids_da_cancellare: 
                 supabase.table("trades").delete().eq("id", d_id).execute()
             
-            # 2. AGGIORNAMENTO TRADES ESISTENTI (CON RICALCOLO AUTOMATICO P&L)
             for _, r in edited_clean.iterrows():
                 p_out = float(r['exit_price']) if pd.notna(r['exit_price']) else 0.0
                 p_in = float(r['entry_price']) if pd.notna(r['entry_price']) else 0.0
                 q = float(r['shares']) if pd.notna(r['shares']) else 0.0
                 lev_val = float(r['leverage']) if pd.notna(r['leverage']) else 1.0
                 
-                # Ricalcolo matematico istantaneo basato sulla valuta/conto modificati
                 c = round((p_in * q) / lev_val, 2)
                 pnl = round(((p_out - p_in) * q * (1 if r['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
                 
@@ -211,7 +202,6 @@ elif st.session_state.page == 'TRADE':
                     "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0
                 }).eq("id", int(r['id'])).execute()
                 
-            st.success("DATABASE ALLINEATO CORRETTAMENTE CON IL BLOTTER")
             st.rerun()
 
 # --- 7. PAGINA: PERFORMANCE HEATMAP ---
@@ -246,7 +236,7 @@ elif st.session_state.page == 'HEATMAP':
             fig_daily.update_yaxes(gridcolor='#222222')
             st.plotly_chart(fig_daily, use_container_width=True)
 
-            # --- Matrice 2: Annuale / Mensile ---
+            # --- Matrice 2: Annuale ---
             st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY HISTORICAL SUMMARY</div>", unsafe_allow_html=True)
             yearly_agg = time_df.groupby(['year', 'month_name']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
             unique_years = sorted(time_df['year'].unique())
