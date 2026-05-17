@@ -65,16 +65,24 @@ with st.sidebar:
 if st.session_state.page == 'DASHBOARD':
     st.markdown("### / MONITOR_DASHBOARD")
     if not balances.empty:
-        st.info("Dashboard attiva. I patrimoni complessivi e le riserve liquide per valuta sono calcolati incrociando i trade attivi.")
+        st.info("Dashboard attiva. Sincronizzazione in tempo reale basata sui trade consolidati.")
         
         st.markdown("<br><div class='ticker-label'>GLOBAL_LIQUIDITY_RESERVES (AGGREGATED BY CURRENCY)</div>", unsafe_allow_html=True)
         global_curr = balances['currency'].unique()
         g_cols = st.columns(max(len(global_curr), 1))
         
         for idx, curr in enumerate(global_curr):
-            total_init = pd.to_numeric(balances[balances['currency'] == curr]['initial_balance']).sum()
-            total_pnl = pd.to_numeric(trades[(trades['currency'] == curr) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
-            total_margin = pd.to_numeric(trades[(trades['currency'] == curr) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
+            # Forza conversione a stringa pulita per evitare disallineamenti di tipo
+            curr_str = str(curr).strip()
+            total_init = pd.to_numeric(balances[balances['currency'] == curr_str]['initial_balance']).sum()
+            
+            total_pnl = 0
+            total_margin = 0
+            if not trades.empty:
+                # Appiattimento stringhe anche sui trade
+                trades['currency_clean'] = trades['currency'].astype(str).str.strip()
+                total_pnl = pd.to_numeric(trades[(trades['currency_clean'] == curr_str) & (trades['status'] == 'CHIUSA')]['profit']).sum()
+                total_margin = pd.to_numeric(trades[(trades['currency_clean'] == curr_str) & (trades['status'] == 'APERTA')]['cost']).sum()
             
             total_vault = total_init + total_pnl
             total_liq = total_vault - total_margin
@@ -82,7 +90,7 @@ if st.session_state.page == 'DASHBOARD':
             with g_cols[idx]:
                 st.markdown(f"""
                     <div class='panel'>
-                        <div class='card-title' style='color:#FFF;'>TOTAL {curr}</div>
+                        <div class='card-title' style='color:#FFF;'>TOTAL {curr_str}</div>
                         <div class='stat-sub'>Patrimonio</div>
                         <div class='stat-val'>{total_vault:,.2f}</div>
                         <div class='stat-sub' style='margin-top:5px;'>Disponibile: <span style='color:#00FF41;'>{total_liq:,.2f}</span></div>
@@ -90,7 +98,7 @@ if st.session_state.page == 'DASHBOARD':
                 """, unsafe_allow_html=True)
     else: st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS.")
 
-# --- 6. PAGINA: TRADE EXECUTION (FIXED CORRISPONDENZA SYNC) ---
+# --- 6. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
@@ -126,6 +134,7 @@ elif st.session_state.page == 'TRADE':
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
             if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
+        # Generazione indicatori geometrici
         trades['P&L'] = trades['profit'].apply(lambda x: f"◼ {x:,.2f}" if x == 0 else (f"▲ {x:,.2f}" if x > 0 else f"▼ {x:,.2f}"))
         trades['%'] = trades['pnl_perc'].apply(lambda x: f"◼ {x:,.2f}%" if x == 0 else (f"▲ {x:,.2f}%" if x > 0 else f"▼ {x:,.2f}%"))
         trades['STATO'] = trades['status'].apply(lambda x: f"⌾ {x}" if x == "APERTA" else f"• {x}")
@@ -134,13 +143,28 @@ elif st.session_state.page == 'TRADE':
         display_trades = trades[[col for col in column_order if col in trades.columns]].sort_values("STATO", ascending=False)
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
-        edited = st.data_editor(display_trades, use_container_width=True, hide_index=True, num_rows="dynamic", disabled=["id", "cost", "P&L", "%", "STATO", "currency"], column_config={"id": None, "asset": "TKR", "side": "S", "shares": st.column_config.NumberColumn("QTY", format="%.2f"), "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), "date": st.column_config.TextColumn("OPEN DATE"), "close_date": st.column_config.TextColumn("CLOSE DATE"), "leverage": "LEV", "cost": st.column_config.NumberColumn("COST", format="%.2f"), "portfolio": st.column_config.SelectboxColumn("CONTO", options=valid_accounts, required=True, width=100), "currency": "VAL", "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), "%": st.column_config.TextColumn("RENDIMENTO", width=95), "STATO": st.column_config.TextColumn("STATO", width=90)}, key="ledger_v22")
+        
+        # FIX: Mantenuto il nome nativo 'currency' per evitare de-sincronizzazioni in Pandas durante l'editing
+        edited = st.data_editor(
+            display_trades, use_container_width=True, hide_index=True, num_rows="dynamic", 
+            disabled=["id", "cost", "P&L", "%", "STATO", "currency"], 
+            column_config={
+                "id": None, "asset": "TKR", "side": "S", "shares": st.column_config.NumberColumn("QTY", format="%.2f"), 
+                "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), 
+                "date": st.column_config.TextColumn("OPEN DATE"), "close_date": st.column_config.TextColumn("CLOSE DATE"), "leverage": "LEV", 
+                "cost": st.column_config.NumberColumn("COST", format="%.2f"), 
+                "portfolio": st.column_config.SelectboxColumn("CONTO", options=valid_accounts, required=True, width=100), 
+                "currency": st.column_config.TextColumn("VALUTA", width=60), # Ripristinato nome nativo
+                "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), "%": st.column_config.TextColumn("RENDIMENTO", width=95), "STATO": st.column_config.TextColumn("STATO", width=90)
+            }, 
+            key="ledger_v23"
+        )
         
         if st.button("SYNCHRONIZE"):
             has_error = False
             for idx, row in edited.iterrows():
                 if 'portfolio' not in row or row['portfolio'] not in valid_accounts:
-                    has_error = True; st.error(f"ERRORE: La riga con asset '{row.get('asset')}' non presenta un CONTO valido o corrispondente ai Settings."); break
+                    has_error = True; st.error(f"ERRORE: La riga con asset '{row.get('asset')}' non presenta un CONTO valido."); break
             
             if not has_error:
                 ids_originali = set(trades['id'])
@@ -155,15 +179,10 @@ elif st.session_state.page == 'TRADE':
                     if p_out > 0 and (pd.isna(c_date) or str(c_date).strip() == "" or c_date == "None"): c_date = str(datetime.date.today())
                     elif p_out == 0: c_date = None
                     
-                    # FIX FONDAMENTALE: Ora sovrascrive esplicitamente "portfolio" sul DB prendendolo dalla colonna modificabile della tabella
                     supabase.table("trades").update({
-                        "exit_price": p_out, 
-                        "status": "CHIUSA" if p_out > 0 else "APERTA", 
-                        "date": str(r['date']), 
-                        "close_date": str(c_date) if c_date else None, 
-                        "portfolio": r['portfolio'], # Forza l'allineamento sul DB
-                        "cost": c, 
-                        "profit": pnl, 
+                        "exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA", 
+                        "date": str(r['date']), "close_date": str(c_date) if c_date else None, 
+                        "portfolio": r['portfolio'], "cost": c, "profit": pnl, 
                         "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0
                     }).eq("id", r['id']).execute()
                 st.rerun()
@@ -183,9 +202,9 @@ elif st.session_state.page == 'HEATMAP':
             time_df['month_name'] = time_df['close_date'].dt.strftime('%b')
             
             months_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            all_days = list(range(1, 31))
+            all_days = list(range(1, 32))
 
-            st.markdown("<div class='ticker-label'>DAILY_OPERATIONAL_MATRIX // FULL_YEAR_GRID (1-31)</div>", unsafe_allow_html=True)
+            st.markdown("<div class='ticker-label'>DAILY_OPERATIONAL_MATRIX</div>", unsafe_allow_html=True)
             current_year = datetime.date.today().year
             daily_df = time_df[time_df['year'] == current_year]
             daily_agg = daily_df.groupby(['month_name', 'day']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
@@ -200,25 +219,10 @@ elif st.session_state.page == 'HEATMAP':
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.plotly_chart(fig_daily, use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
-
-            st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY HISTORICAL PERFORMANCE</div>", unsafe_allow_html=True)
-            yearly_agg = time_df.groupby(['year', 'month_name']).agg(pnl_totale=('profit', 'sum'), num_trades=('id', 'count'), assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))).reset_index()
-            unique_years = sorted(time_df['year'].unique())
-            pivot_yearly = yearly_agg.pivot(index='year', columns='month_name', values='pnl_totale').reindex(index=unique_years, columns=months_order).fillna(0.0)
-            pivot_y_trades = yearly_agg.pivot(index='year', columns='month_name', values='num_trades').reindex(index=unique_years, columns=months_order).fillna(0)
-            pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(index=unique_years, columns=months_order).fillna("None")
-
-            fig_yearly = go.Figure(data=go.Heatmap(z=pivot_yearly.values, x=pivot_yearly.columns, y=pivot_yearly.index, colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))))
-            fig_yearly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#CCC", size=10), height=220, margin=dict(l=50,r=10,t=10,b=30))
-            fig_yearly.update_xaxes(gridcolor='#1A1A1A')
-            fig_yearly.update_yaxes(title="ANNO", tickmode="linear", dtick=1, gridcolor='#1A1A1A')
-            st.markdown("<div class='panel'>", unsafe_allow_html=True)
-            st.plotly_chart(fig_yearly, use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
         else: st.info("Nessuna operazione conclusa registrata.")
     else: st.info("Chiudi dei trade per generare le matrici temporali.")
 
-# --- 8. PAGINA: SETTINGS ---
+# --- 8. PAGINA: SYSTEM SETTINGS ---
 elif st.session_state.page == 'SETTINGS':
     st.markdown("### / SYSTEM_SETTINGS")
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
@@ -231,13 +235,20 @@ elif st.session_state.page == 'SETTINGS':
     if not balances.empty:
         st.markdown("<div class='ticker-label'>VAULT_INSIGHTS & LIVE CONSOLE</div>", unsafe_allow_html=True)
         for idx, row_balance in balances.iterrows():
-            acc = row_balance['account_name']
-            curr = row_balance['currency']
+            acc = str(row_balance['account_name']).strip()
+            curr = str(row_balance['currency']).strip()
             init_val = float(row_balance['initial_balance'])
             row_id = row_balance['id']
             
-            pnl = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['currency'] == curr) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
-            margin_used = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['currency'] == curr) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
+            # Calcolo P&L e margini pulito con string flattening
+            pnl = 0
+            margin_used = 0
+            if not trades.empty:
+                trades['portfolio_clean'] = trades['portfolio'].astype(str).str.strip()
+                trades['currency_clean'] = trades['currency'].astype(str).str.strip()
+                
+                pnl = pd.to_numeric(trades[(trades['portfolio_clean'] == acc) & (trades['currency_clean'] == curr) & (trades['status'] == 'CHIUSA')]['profit']).sum()
+                margin_used = pd.to_numeric(trades[(trades['portfolio_clean'] == acc) & (trades['currency_clean'] == curr) & (trades['status'] == 'APERTA')]['cost']).sum()
             
             total_bal = init_val + pnl
             liq = total_bal - margin_used
