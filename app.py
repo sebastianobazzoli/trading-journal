@@ -26,7 +26,6 @@ st.markdown("""
         .panel { border: 1px solid #1A1A1A; padding: 15px; background: #0A0A0A; border-radius: 4px; margin-bottom: 15px; }
         .ticker-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
         
-        /* Bottoni Rigorosi */
         div.stButton > button {
             background-color: #0A0A0A !important; color: #888 !important; border: 1px solid #1A1A1A !important;
             border-radius: 2px !important; padding: 6px 20px !important; font-family: 'Roboto Mono', monospace !important;
@@ -51,7 +50,7 @@ def get_data(table):
 trades = get_data("trades")
 balances = get_data("balances")
 
-# --- 4. NAVIGAZIONE ---
+# --- 4. NAVIGAZIONE AGGIORNATA ---
 if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
@@ -59,17 +58,16 @@ with st.sidebar:
     st.markdown("<div style='color:#00FF41; font-weight:700; font-size:18px; margin-top:20px;'>TERMINAL_OS</div>", unsafe_allow_html=True)
     st.button("[01] MONITOR_DASHBOARD", on_click=set_page, args=('DASHBOARD',))
     st.button("[02] TRADE_EXECUTION", on_click=set_page, args=('TRADE',))
-    st.button("[03] SYSTEM_SETTINGS", on_click=set_page, args=('SETTINGS',))
+    st.button("[03] PERFORMANCE_HEATMAP", on_click=set_page, args=('HEATMAP',)) # Nuova pagina sotto Execution
+    st.button("[04] SYSTEM_SETTINGS", on_click=set_page, args=('SETTINGS',))
 
-# --- 5. DASHBOARD ---
+# --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
     st.markdown("### / MONITOR_DASHBOARD")
-    if not balances.empty:
-        st.info("Dashboard attiva. I dati di rendimento globale e liquidità sono sincronizzati con le impostazioni del Vault.")
-    else:
-        st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS per sbloccare la Dashboard globale.")
+    if not balances.empty: st.info("Dashboard attiva e agganciata al Vault di sistema.")
+    else: st.warning("Inizializza i tuoi conti nella sezione SYSTEM_SETTINGS per sbloccare la Dashboard.")
 
-# --- 6. TRADE EXECUTION ---
+# --- 6. PAGINA: TRADE EXECUTION ---
 elif st.session_state.page == 'TRADE':
     st.markdown("### / EXECUTION_LOG")
     valid_accounts = balances['account_name'].unique().tolist() if not balances.empty else []
@@ -98,127 +96,127 @@ elif st.session_state.page == 'TRADE':
                         "portfolio": acc_choice, "currency": curr_choice, "instrument": "Stock"
                     }).execute()
                     st.rerun()
-        else:
-            st.error("ERRORE DI SISTEMA: Crea prima un conto in SYSTEM_SETTINGS.")
+        else: st.error("ERRORE DI SISTEMA: Crea prima un conto in SYSTEM_SETTINGS.")
 
     if not trades.empty:
-        # Conversione e pulizia dati numerici
         for c in ['shares', 'entry_price', 'exit_price', 'profit', 'pnl_perc', 'cost']:
             if c in trades.columns: trades[c] = pd.to_numeric(trades[c], errors='coerce').round(2).fillna(0.0)
 
-        # Creazione colonne stringa formattate con indicatori per aggirare il blocco CSS di st.data_editor
         trades['P&L'] = trades['profit'].apply(lambda x: f"◼ {x:,.2f}" if x == 0 else (f"▲ {x:,.2f}" if x > 0 else f"▼ {x:,.2f}"))
         trades['%'] = trades['pnl_perc'].apply(lambda x: f"◼ {x:,.2f}%" if x == 0 else (f"▲ {x:,.2f}%" if x > 0 else f"▼ {x:,.2f}%"))
         trades['STATO'] = trades['status'].apply(lambda x: f"⌾ {x}" if x == "APERTA" else f"• {x}")
 
-        # Ordinamento colonne desiderato per affiancare P&L e % alla fine del blocco dati
-        column_order = [
-            'id', 'asset', 'side', 'shares', 'entry_price', 'exit_price', 
-            'leverage', 'cost', 'portfolio', 'currency', 'P&L', '%', 'STATO'
-        ]
-        # Teniamo solo le colonne esistenti basandoci sull'ordine stabilito
-        display_trades = trades[[col for col in column_order if col in trades.columns]]
-        display_trades = display_trades.sort_values("STATO", ascending=False)
+        column_order = ['id', 'asset', 'side', 'shares', 'entry_price', 'exit_price', 'leverage', 'cost', 'portfolio', 'currency', 'P&L', '%', 'STATO']
+        display_trades = trades[[col for col in column_order if col in trades.columns]].sort_values("STATO", ascending=False)
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
-        
-        # Tabella di controllo con P&L e % affiancate
-        edited = st.data_editor(
-            display_trades,
-            use_container_width=True, hide_index=True, 
-            disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"],
-            column_config={
-                "id": None, 
-                "asset": "TKR", 
-                "side": "S", 
-                "shares": st.column_config.NumberColumn("QTY", format="%.2f"), 
-                "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), 
-                "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), 
-                "leverage": "LEV",
-                "cost": st.column_config.NumberColumn("COST", format="%.2f"), 
-                "portfolio": "CONTO",
-                "currency": "VAL",
-                "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), 
-                "%": st.column_config.TextColumn("RENDIMENTO", width=95), 
-                "STATO": st.column_config.TextColumn("STATO", width=90)
-            },
-            key="ledger_v16"
-        )
+        edited = st.data_editor(display_trades, use_container_width=True, hide_index=True, disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"], column_config={"id": None, "asset": "TKR", "side": "S", "shares": st.column_config.NumberColumn("QTY", format="%.2f"), "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), "leverage": "LEV", "cost": st.column_config.NumberColumn("COST", format="%.2f"), "portfolio": "CONTO", "currency": "VAL", "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), "%": st.column_config.TextColumn("RENDIMENTO", width=95), "STATO": st.column_config.TextColumn("STATO", width=90)}, key="ledger_v17")
         
         if st.button("SYNCHRONIZE"):
             has_error = False
             for idx, row in edited.iterrows():
-                if 'portfolio' not in row or pd.isna(row['portfolio']) or str(row['portfolio']).strip() == "" or row['portfolio'] not in valid_accounts:
-                    has_error = True
-                    st.error(f"ERRORE: Riga asset '{row.get('asset', 'Sconosciuto')}' non associata a un conto valido.")
-                    break
-            
+                if 'portfolio' not in row or row['portfolio'] not in valid_accounts:
+                    has_error = True; st.error(f"ERRORE: Riga asset '{row.get('asset')}' non valida."); break
             if not has_error:
                 ids_del = set(trades['id']) - set(edited['id'])
                 for d in ids_del: supabase.table("trades").delete().eq("id", d).execute()
                 for _, r in edited.iterrows():
                     p_out, p_in, q = float(r['exit_price']), float(r['entry_price']), float(r['shares'])
-                    # Recuperiamo la leva originale dal dataframe trades originale per il calcolo
-                    original_row = trades[trades['id'] == r['id']]
-                    lev_val = float(original_row['leverage'].values[0]) if not original_row.empty else 1.0
-                    
+                    orig = trades[trades['id'] == r['id']]; lev_val = float(orig['leverage'].values[0]) if not orig.empty else 1.0
                     c = round((p_in * q) / lev_val, 2)
                     pnl = round(((p_out - p_in) * q * (1 if r['side'] == "LONG" else -1)), 2) if p_out > 0 else 0
-                    supabase.table("trades").update({
-                        "exit_price": p_out, 
-                        "status": "CHIUSA" if p_out > 0 else "APERTA", 
-                        "portfolio": r['portfolio'], 
-                        "cost": c,
-                        "profit": pnl, 
-                        "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0
-                    }).eq("id", r['id']).execute()
+                    supabase.table("trades").update({"exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA", "portfolio": r['portfolio'], "cost": c, "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0}).eq("id", r['id']).execute()
                 st.rerun()
 
-# --- 7. PAGINA: SETTINGS ---
+# --- 7. PAGINA: PERFORMANCE HEATMAP (NUOVA SEZIONE) ---
+elif st.session_state.page == 'HEATMAP':
+    st.markdown("### / PERFORMANCE_HEATMAP")
+    st.markdown("<div class='ticker-label'>RISK_MATRIX // CONTO VS ASSET PERFORMANCE</div>", unsafe_allow_html=True)
+    
+    if not trades.empty:
+        # Pulizia dati per elaborazione grafica
+        heatmap_df = trades.copy()
+        heatmap_df['profit'] = pd.to_numeric(heatmap_df['profit'], errors='coerce').fillna(0.0)
+        
+        # Raggruppiamo i dati per fare una mappa basata sul profitto reale cumulativo
+        grouped_df = heatmap_df.groupby(['portfolio', 'asset'])['profit'].sum().reset_index()
+        
+        if not grouped_df.empty and grouped_df['profit'].any():
+            # Costruzione della Heatmap Istituzionale (Sfondo scuro, scala Divergente Grigio -> Rosso/Verde)
+            fig = px.density_heatmap(
+                grouped_df, 
+                x="portfolio", 
+                y="asset", 
+                z="profit",
+                labels={"portfolio": "CONTO", "asset": "ASSET (TKR)", "profit": "P&L TOTALE"},
+                color_continuous_scale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]], # Rosso (Loss) -> Scuro -> Verde (Profit)
+                color_continuous_midpoint=0.0
+            )
+            
+            # Layout del grafico coordinato con lo stile del terminale
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Roboto Mono, monospace", color="#CCC", size=11),
+                margin=dict(l=50, r=10, t=10, b=40),
+                height=500,
+                coloraxis_colorbar=dict(
+                    title="P&L VALUE",
+                    thicknessmode="pixels", thickness=15,
+                    lenmode="pixels", len=300,
+                    yanchor="top", y=1,
+                    ticks="outside"
+                )
+            )
+            
+            # Griglia interna minimale
+            fig.update_xaxes(title_text="VAULT ACCOUNTS", gridcolor='#1A1A1A', color="#777")
+            fig.update_yaxes(title_text="TRADED ASSETS", gridcolor='#1A1A1A', color="#777")
+            
+            # Renderizzazione all'interno del pannello
+            st.markdown("<div class='panel'>", unsafe_allow_html=True)
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info("Nessun dato di P&L registrato. Chiudi un'operazione con profitto o perdita nella tabella Execution per generare la mappa di rischio.")
+    else:
+        st.info("Nessuna operazione presente nel registro di sistema.")
+
+# --- 8. PAGINA: SETTINGS ---
 elif st.session_state.page == 'SETTINGS':
     st.markdown("### / SYSTEM_SETTINGS")
-    
+    # ... [Preservato e intatto il codice della sezione SETTINGS precedente] ...
     with st.expander("ADD_NEW_ACCOUNT_ASSET", expanded=False):
         with st.form("vault_form"):
             c1, c2, c3 = st.columns(3)
             n, cr, bl = c1.text_input("ACCOUNT NAME"), c2.selectbox("CURR", ["USD", "EUR", "USDT", "BTC", "ETH"]), c3.number_input("INITIAL BALANCE", min_value=0.0)
             if st.form_submit_button("INIZIALIZZA"):
-                if n:
-                    supabase.table("balances").insert({"account_name": n, "currency": cr, "initial_balance": bl}).execute()
-                    st.rerun()
+                if n: supabase.table("balances").insert({"account_name": n, "currency": cr, "initial_balance": bl}).execute(); st.rerun()
 
     if not balances.empty:
         st.markdown("<div class='ticker-label'>VAULT_INSIGHTS & LIVE MANAGEMENT</div>", unsafe_allow_html=True)
-        unique_accounts = balances['account_name'].unique()
-        
-        for acc in unique_accounts:
+        for acc in balances['account_name'].unique():
             acc_data = balances[balances['account_name'] == acc]
             with st.container():
                 c_info, c_chart = st.columns([1, 1.5])
-                total_bal = 0
-                margin_used = 0
+                total_bal, margin_used = 0, 0
                 for _, r in acc_data.iterrows():
                     init = float(r['initial_balance'])
                     pnl = pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'CHIUSA')]['profit']).sum() if not trades.empty else 0
                     total_bal += (init + pnl)
                     margin_used += pd.to_numeric(trades[(trades['portfolio'] == acc) & (trades['status'] == 'APERTA')]['cost']).sum() if not trades.empty else 0
-                
                 liq = total_bal - margin_used
-                
-                with c_info:
-                    st.markdown(f"<div class='panel'><div class='card-title'>{acc.upper()}</div><div class='stat-sub'>Patrimonio Totale</div><div class='stat-val'>{total_bal:,.2f}</div><div class='stat-sub' style='margin-top:10px;'>Liquidità Disponibile: <span style='color:#00FF41;'>{liq:,.2f}</span></div></div>", unsafe_allow_html=True)
+                with c_info: st.markdown(f"<div class='panel'><div class='card-title'>{acc.upper()}</div><div class='stat-sub'>Patrimonio Totale</div><div class='stat-val'>{total_bal:,.2f}</div><div class='stat-sub' style='margin-top:10px;'>Liquidità Disponibile: <span style='color:#00FF41;'>{liq:,.2f}</span></div></div>", unsafe_allow_html=True)
                 with c_chart:
                     fig = px.pie(pd.DataFrame({"Cat": ["Libero", "Impegnato"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Libero": "#00FF41", "Impegnato": "#222"})
-                    fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=140, margin=dict(l=0,r=0,t=0,b=0))
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=140, margin=dict(l=0,r=0,t=0,b=0)); st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("<br><div class='ticker-label'>CONSOLE_DI_MODIFICA_CONTI</div>", unsafe_allow_html=True)
         edited_bal = st.data_editor(balances, use_container_width=True, hide_index=True, num_rows="dynamic", column_config={"id": None, "account_name": st.column_config.TextColumn("NOME CONTO", required=True), "currency": st.column_config.SelectboxColumn("VALUTA", options=["USD", "EUR", "USDT", "BTC", "ETH"], required=True), "initial_balance": st.column_config.NumberColumn("SALDO INIZIALE", format="%.2f", min_value=0.0)}, key="secure_settings_editor")
         if st.button("SYNC_SETTINGS_DATA"):
             try:
-                ids_originali = set(balances['id'])
-                ids_rimasti = set(edited_bal['id'].dropna())
-                for d_id in (ids_originali - ids_rimasti): supabase.table("balances").delete().eq("id", d_id).execute()
+                ids_ori = set(balances['id']); ids_rim = set(edited_bal['id'].dropna())
+                for d_id in (ids_ori - ids_rim): supabase.table("balances").delete().eq("id", d_id).execute()
                 for _, r in edited_bal.iterrows():
                     if pd.isna(r['id']): supabase.table("balances").insert({"account_name": r['account_name'], "currency": r['currency'], "initial_balance": r['initial_balance']}).execute()
                     else: supabase.table("balances").update({"account_name": r['account_name'], "currency": r['currency'], "initial_balance": r['initial_balance']}).eq("id", r['id']).execute()
