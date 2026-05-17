@@ -18,7 +18,7 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS FLOWAY INSTITUTIONAL CORE (ACTIVE MENU LIGHT PATCH) ---
+# --- 2. CSS FLOWAY PURE TYPOGRAPHY INTERFACE ---
 st.markdown("""
     <style>
         /* Layout & Sfondi Nativi Terminale - Spaziatura Rigida */
@@ -36,40 +36,37 @@ st.markdown("""
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 0px; margin-bottom: 10px; }
         .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         
-        /* INTERFACCIA DI NAVIGAZIONE HARDCORE INIEZIONE HTML */
+        /* RIMOZIONE COMPLETA DEI QUADRATI: SOLO SCRITTE NUDE E PURE */
         .nav-item {
             display: block;
             width: 100%;
             height: 38px;
             line-height: 38px;
             padding-left: 15px;
-            background-color: #0A0A0A;
-            color: #888888;
+            background: transparent !important; /* Rimosso sfondo di selezione */
+            color: #666666;
             font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             text-decoration: none;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            border-left: 3px solid transparent;
             margin-bottom: 2px;
             cursor: pointer;
+            transition: color 0.1s ease-in-out !important;
         }
         .nav-item:hover {
-            color: #FFFF00;
-            background-color: #141414;
-            border-left: 3px solid #FFFF00;
+            color: #FFFF00 !important; /* Accensione testo all'hover */
         }
         
-        /* STATO ATTIVO SBLOCCATO: Inversione video totale stile Bloomberg originale */
+        /* STATO ATTIVO: Solo il testo diventa Giallo Bloomberg, nessun quadrato */
         .nav-active {
-            background-color: #FFD700 !important;
-            color: #000000 !important;
-            border-left: 3px solid #FFFF00 !important;
+            color: #FFD700 !important;
+            font-weight: bold !important;
             cursor: default;
         }
         
-        /* Nasconde i pulsanti Streamlit invisibili sovrapposti per la gestione dei clic */
+        /* Gestione area invisibile per il click nativo */
         .sidebar-clickable div.stButton > button {
             position: absolute;
             transform: translateY(-40px);
@@ -116,13 +113,11 @@ def set_page(name): st.session_state.page = name
 with st.sidebar:
     st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:25px; padding-left:15px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
     
-    # Renderizzazione Condizionale dei Bottoni tramite CSS Inversione Video
     pages = ["DASHBOARD", "BLOTTER", "CALENDAR", "VAULTS"]
     
     for p in pages:
         is_active = "nav-active" if st.session_state.page == p else ""
         st.markdown(f"<div class='nav-item {is_active}'>{p}</div>", unsafe_allow_html=True)
-        # Il pulsante invisibile intercetta il clic nativo sopra la barra grafica custom
         st.markdown("<div class='sidebar-clickable'>", unsafe_allow_html=True)
         st.button("", key=f"nav_btn_{p}", on_click=set_page, args=(p,))
         st.markdown("</div>", unsafe_allow_html=True)
