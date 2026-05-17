@@ -110,7 +110,7 @@ elif st.session_state.page == 'TRADE':
         display_trades = trades[[col for col in column_order if col in trades.columns]].sort_values("STATO", ascending=False)
 
         st.markdown("<div class='ticker-label'>LEDGER_SYSTEM</div>", unsafe_allow_html=True)
-        edited = st.data_editor(display_trades, use_container_width=True, hide_index=True, disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"], column_config={"id": None, "asset": "TKR", "side": "S", "shares": st.column_config.NumberColumn("QTY", format="%.2f"), "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), "leverage": "LEV", "cost": st.column_config.NumberColumn("COST", format="%.2f"), "portfolio": "CONTO", "currency": "VAL", "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), "%": st.column_config.TextColumn("RENDIMENTO", width=95), "STATO": st.column_config.TextColumn("STATO", width=90)}, key="ledger_v18")
+        edited = st.data_editor(display_trades, use_container_width=True, hide_index=True, disabled=["id", "cost", "P&L", "%", "STATO", "portfolio", "currency"], column_config={"id": None, "asset": "TKR", "side": "S", "shares": st.column_config.NumberColumn("QTY", format="%.2f"), "entry_price": st.column_config.NumberColumn("IN", format="%.2f"), "exit_price": st.column_config.NumberColumn("OUT", format="%.2f"), "leverage": "LEV", "cost": st.column_config.NumberColumn("COST", format="%.2f"), "portfolio": "CONTO", "currency": "VAL", "P&L": st.column_config.TextColumn("P&L (REAL)", width=100), "%": st.column_config.TextColumn("RENDIMENTO", width=95), "STATO": st.column_config.TextColumn("STATO", width=90)}, key="ledger_v19")
         
         if st.button("SYNCHRONIZE"):
             has_error = False
@@ -128,23 +128,26 @@ elif st.session_state.page == 'TRADE':
                     supabase.table("trades").update({"exit_price": p_out, "status": "CHIUSA" if p_out > 0 else "APERTA", "portfolio": r['portfolio'], "cost": c, "profit": pnl, "pnl_perc": round(pnl/c*100, 2) if (p_out > 0 and c > 0) else 0}).eq("id", r['id']).execute()
                 st.rerun()
 
-# --- 7. PAGINA: PERFORMANCE HEATMAP (CALENDAR VIEW) ---
+# --- 7. PAGINA: PERFORMANCE HEATMAP (CALENDAR VIEW CORRETTA) ---
 elif st.session_state.page == 'HEATMAP':
     st.markdown("### / PERFORMANCE_HEATMAP")
     
     if not trades.empty:
-        # Prepariamo i dati storici basandoci sulla data di chiusura della posizione
-        time_df = trades[trades['status'] == 'CHIUSA'].copy()
+        # Prepariamo i dati utilizzando la colonna standard 'date' presente nel DB
+        time_df = trades.copy()
         
-        if not time_df.empty and 'close_date' in time_df.columns:
-            time_df['close_date'] = pd.to_datetime(time_df['close_date'])
+        if 'date' in time_df.columns and not time_df['date'].empty:
+            time_df['date'] = pd.to_datetime(time_df['date'], errors='coerce')
+            # Rimuoviamo eventuali righe con date corrotte o nulle
+            time_df = time_df.dropna(subset=['date'])
+            
             time_df['profit'] = pd.to_numeric(time_df['profit'], errors='coerce').fillna(0.0)
             
-            # Estrattività temporale
-            time_df['year'] = time_df['close_date'].dt.year
-            time_df['month'] = time_df['close_date'].dt.month
-            time_df['day'] = time_df['close_date'].dt.day
-            time_df['month_name'] = time_df['close_date'].dt.strftime('%b')
+            # Estrattività temporale corretta
+            time_df['year'] = time_df['date'].dt.year
+            time_df['month'] = time_df['date'].dt.month
+            time_df['day'] = time_df['date'].dt.day
+            time_df['month_name'] = time_df['date'].dt.strftime('%b')
             
             # Mesi ordinati istituzionali
             months_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -156,14 +159,13 @@ elif st.session_state.page == 'HEATMAP':
             daily_df = time_df[time_df['year'] == current_year]
             
             if not daily_df.empty:
-                # Aggregazione per giorno e mese con estrazione dei dettagli per l'hover
                 daily_agg = daily_df.groupby(['month_name', 'day']).agg(
                     pnl_totale=('profit', 'sum'),
                     num_trades=('id', 'count'),
-                    assets_list=('asset', lambda x: ", ".join(x.unique()))
+                    assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))
                 ).reset_index()
                 
-                # Creiamo pivot completo 1-31 giorni per tutti i mesi per generare la griglia geometrica fissa
+                # Generazione pivot fisse per la matrice 1-31
                 pivot_daily = daily_agg.pivot(index='month_name', columns='day', values='pnl_totale').reindex(months_order).fillna(0.0)
                 pivot_trades = daily_agg.pivot(index='month_name', columns='day', values='num_trades').reindex(months_order).fillna(0)
                 pivot_assets = daily_agg.pivot(index='month_name', columns='day', values='assets_list').reindex(months_order).fillna("None")
@@ -186,7 +188,7 @@ elif st.session_state.page == 'HEATMAP':
                 st.plotly_chart(fig_daily, use_container_width=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
-                st.info(f"Nessuna operazione conclusa registrata nell'anno corrente ({current_year}).")
+                st.info(f"Nessun trade registrato con la data dell'anno corrente ({current_year}) nella tabella Execution.")
 
             # --- 2. HEATMAP ANNUALE (MESE PER MESE) ---
             st.markdown("<br><div class='ticker-label'>ANNUAL_MACRO_MATRIX // MONTHLY HISTORICAL PERFORMANCE</div>", unsafe_allow_html=True)
@@ -194,33 +196,35 @@ elif st.session_state.page == 'HEATMAP':
             yearly_agg = time_df.groupby(['year', 'month_name']).agg(
                 pnl_totale=('profit', 'sum'),
                 num_trades=('id', 'count'),
-                assets_list=('asset', lambda x: ", ".join(x.unique()))
+                assets_list=('asset', lambda x: ", ".join(x.dropna().unique()))
             ).reset_index()
             
-            pivot_yearly = yearly_agg.pivot(index='year', columns='month_name', values='pnl_totale').reindex(columns=months_order).fillna(0.0)
-            pivot_y_trades = yearly_agg.pivot(index='year', columns='month_name', values='num_trades').reindex(columns=months_order).fillna(0)
-            pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(columns=months_order).fillna("None")
+            if not yearly_agg.empty:
+                pivot_yearly = yearly_agg.pivot(index='year', columns='month_name', values='pnl_totale').reindex(columns=months_order).fillna(0.0)
+                pivot_y_trades = yearly_agg.pivot(index='year', columns='month_name', values='num_trades').reindex(columns=months_order).fillna(0)
+                pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(columns=months_order).fillna("None")
 
-            fig_yearly = go.Figure(data=go.Heatmap(
-                z=pivot_yearly.values,
-                x=pivot_yearly.columns,
-                y=pivot_yearly.index,
-                colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]],
-                zmid=0.0,
-                showscale=True,
-                hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>",
-                customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))
-            ))
-            
-            fig_yearly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#CCC", size=10), height=220, margin=dict(l=50,r=10,t=10,b=30))
-            fig_yearly.update_xaxes(gridcolor='#1A1A1A')
-            fig_yearly.update_yaxes(title="ANNO", tickmode="linear", dtick=1, gridcolor='#1A1A1A')
-            st.markdown("<div class='panel'>", unsafe_allow_html=True)
-            st.plotly_chart(fig_yearly, use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            
+                fig_yearly = go.Figure(data=go.Heatmap(
+                    z=pivot_yearly.values,
+                    x=pivot_yearly.columns,
+                    y=pivot_yearly.index,
+                    colorscale=[[0.0, "#FF3131"], [0.5, "#111111"], [1.0, "#00FF41"]],
+                    zmid=0.0,
+                    showscale=True,
+                    hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>OPERAZIONI:</b> %{customdata[0]}<br><b>ASSETS:</b> %{customdata[1]}<extra></extra>",
+                    customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))
+                ))
+                
+                fig_yearly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#CCC", size=10), height=220, margin=dict(l=50,r=10,t=10,b=30))
+                fig_yearly.update_xaxes(gridcolor='#1A1A1A')
+                fig_yearly.update_yaxes(title="ANNO", tickmode="linear", dtick=1, gridcolor='#1A1A1A')
+                st.markdown("<div class='panel'>", unsafe_allow_html=True)
+                st.plotly_chart(fig_yearly, use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.info("Dati storici insufficienti per generare la matrice annuale.")
         else:
-            st.info("La tabella degli storici non contiene righe con date valide o posizioni chiuse.")
+            st.error("Rilevato problema strutturale: la colonna 'date' non è presente nella tabella dei trade di Supabase.")
     else:
         st.info("Inserisci o chiudi dei trade per abilitare le matrici temporali di performance.")
 
