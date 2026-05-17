@@ -18,10 +18,10 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS FLOWAY CORE INTERFACE (SYMMETRIC NAV PATCH) ---
+# --- 2. CSS FLOWAY INSTITUTIONAL CORE (ACTIVE MENU LIGHT PATCH) ---
 st.markdown("""
     <style>
-        /* Layout & Sfondi Nativi Terminale - Spaziatura Rigida e Leggibile */
+        /* Layout & Sfondi Nativi Terminale - Spaziatura Rigida */
         .block-container { padding-top: 2rem !important; padding-left: 1rem !important; padding-right: 1rem !important; max-width: 100% !important; }
         
         html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] { 
@@ -36,31 +36,56 @@ st.markdown("""
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 0px; margin-bottom: 10px; }
         .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         
-        /* RE-DESIGN PULSANTI SIDEBAR: SIMMETRICI, IDENTICI E SENZA BORDI INUTILI */
-        div.stSidebar div.stButton > button {
-            background-color: #0A0A0A !important; 
-            color: #888888 !important; 
-            border: none !important;
-            border-left: 3px solid transparent !important;
-            border-radius: 0px !important; 
-            padding: 0px 15px !important; 
-            height: 38px !important;
-            line-height: 38px !important;
-            font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important;
-            font-size: 11px !important; 
-            text-transform: uppercase !important; 
-            font-weight: bold !important; 
-            width: 100% !important; 
-            text-align: left !important;
-            transition: all 0.15s ease-in-out !important; 
-            letter-spacing: 1.5px !important;
+        /* INTERFACCIA DI NAVIGAZIONE HARDCORE INIEZIONE HTML */
+        .nav-item {
+            display: block;
+            width: 100%;
+            height: 38px;
+            line-height: 38px;
+            padding-left: 15px;
+            background-color: #0A0A0A;
+            color: #888888;
+            font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace;
+            font-size: 11px;
+            font-weight: bold;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            border-left: 3px solid transparent;
+            margin-bottom: 2px;
+            cursor: pointer;
+        }
+        .nav-item:hover {
+            color: #FFFF00;
+            background-color: #141414;
+            border-left: 3px solid #FFFF00;
         }
         
-        /* Effetto Hover Istituzionale: Si illumina di Giallo Ambra e crea la linea di focus */
-        div.stSidebar div.stButton > button:hover { 
-            color: #FFFF00 !important; 
-            background-color: #141414 !important; 
+        /* STATO ATTIVO SBLOCCATO: Inversione video totale stile Bloomberg originale */
+        .nav-active {
+            background-color: #FFD700 !important;
+            color: #000000 !important;
             border-left: 3px solid #FFFF00 !important;
+            cursor: default;
+        }
+        
+        /* Nasconde i pulsanti Streamlit invisibili sovrapposti per la gestione dei clic */
+        .sidebar-clickable div.stButton > button {
+            position: absolute;
+            transform: translateY(-40px);
+            height: 38px !important;
+            width: 100% !important;
+            background: transparent !important;
+            color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            cursor: pointer;
+            z-index: 10;
+        }
+        .sidebar-clickable div.stButton > button:hover {
+            background: transparent !important;
+            color: transparent !important;
+            border: none !important;
         }
         
         /* Monitor Panel Card */
@@ -68,7 +93,6 @@ st.markdown("""
         .stat-val { font-size: 20px; font-weight: 700; color: #FFFFFF; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         .stat-sub { font-size: 9px; color: #666666; text-transform: uppercase; font-weight: bold; font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         
-        /* Allineamento dei caratteri all'interno del data editor di Streamlit */
         div[data-testid="stDataEditor"] * { font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace !important; }
         div[data-testid="stDataEditor"] { background-color: #050505 !important; border: 1px solid #222222 !important; }
     </style>
@@ -91,10 +115,17 @@ def set_page(name): st.session_state.page = name
 
 with st.sidebar:
     st.markdown("<div style='color:#FFD700; font-weight:700; font-size:18px; margin-bottom:25px; padding-left:15px; letter-spacing:1px; font-family:Consolas, Monaco, monospace;'>FLOWAY // OS</div>", unsafe_allow_html=True)
-    st.button("DASHBOARD", on_click=set_page, args=('DASHBOARD',))
-    st.button("BLOTTER", on_click=set_page, args=('BLOTTER',))
-    st.button("CALENDAR", on_click=set_page, args=('CALENDAR',))
-    st.button("VAULTS", on_click=set_page, args=('VAULTS',))
+    
+    # Renderizzazione Condizionale dei Bottoni tramite CSS Inversione Video
+    pages = ["DASHBOARD", "BLOTTER", "CALENDAR", "VAULTS"]
+    
+    for p in pages:
+        is_active = "nav-active" if st.session_state.page == p else ""
+        st.markdown(f"<div class='nav-item {is_active}'>{p}</div>", unsafe_allow_html=True)
+        # Il pulsante invisibile intercetta il clic nativo sopra la barra grafica custom
+        st.markdown("<div class='sidebar-clickable'>", unsafe_allow_html=True)
+        st.button("", key=f"nav_btn_{p}", on_click=set_page, args=(p,))
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # --- 5. PAGINA: DASHBOARD ---
 if st.session_state.page == 'DASHBOARD':
