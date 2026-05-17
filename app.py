@@ -8,7 +8,7 @@ from supabase import create_client
 # --- 1. CONFIGURAZIONE & COSTANTI GLOBALI ---
 st.set_page_config(page_title="TERMINAL_X", layout="wide", initial_sidebar_state="expanded")
 
-# Dichiarazione globale per evitare NameError in qualsiasi pagina del terminale
+# Dichiarazione globale delle valute accettate dal sistema
 valid_currencies = ["USD", "EUR", "USDT", "BTC", "ETH"]
 
 @st.cache_resource
@@ -18,33 +18,36 @@ def init_db():
 
 supabase = init_db()
 
-# --- 2. CSS BLOOMBERG TERMINAL CORE ---
+# --- 2. CSS BLOOMBERG TERMINAL CORE (TRUE YELLOW PATCH) ---
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght=400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
         
-        /* Layout & Sfondi */
+        /* Layout & Sfondi Nativi Terminale */
         .block-container { padding-top: 2rem !important; padding-left: 1rem !important; padding-right: 1rem !important; max-width: 100% !important; }
         html, body, [data-testid="stAppViewContainer"] { background-color: #000000 !important; font-family: 'Roboto Mono', monospace !important; color: #D5D5D5; }
         [data-testid="stSidebar"] { background-color: #0A0A0A !important; border-right: 2px solid #222222 !important; padding-top: 1rem !important; }
         
         /* Pannelli Stile Bloomberg */
         .panel { border: 1px solid #222222; padding: 12px; background: #050505; border-radius: 2px; margin-bottom: 10px; }
-        .ticker-label { color: #FF9900; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FF9900; padding-left: 6px; }
         
-        /* Pulsanti Professionali */
+        /* FIX: Colore Giallo Bloomberg Istituzionale per Etichette e Intestazioni */
+        .ticker-label { color: #FFD700; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #FFD700; padding-left: 6px; }
+        
+        /* Pulsanti Laterali con Testo Giallo Bloomberg */
         div.stButton > button {
-            background-color: #111111 !important; color: #FF9900 !important; border: 1px solid #333333 !important;
+            background-color: #111111 !important; color: #FFD700 !important; border: 1px solid #333333 !important;
             border-radius: 0px !important; padding: 4px 14px !important; font-family: 'Roboto Mono', monospace !important;
             font-size: 11px !important; text-transform: uppercase !important; font-weight: bold; width: 100%; text-align: left;
         }
         div.stButton > button:hover { border-color: #00FF41 !important; color: #00FF41 !important; background-color: #071507 !important; }
         
-        /* Cards Monitor */
+        /* Monitor Panel Card */
         .card-title { color: #00FF41; font-weight: 700; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #222222; padding-bottom: 4px; text-transform: uppercase; }
         .stat-val { font-size: 20px; font-weight: 700; color: #FFFFFF; font-family: 'Roboto Mono', monospace; }
         .stat-sub { font-size: 9px; color: #666666; text-transform: uppercase; font-weight: bold; }
         
+        /* Integrazione estetica griglia dati */
         div[data-testid="stDataEditor"] { background-color: #050505 !important; border: 1px solid #222222 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -65,7 +68,7 @@ if 'page' not in st.session_state: st.session_state.page = 'DASHBOARD'
 def set_page(name): st.session_state.page = name
 
 with st.sidebar:
-    st.markdown("<div style='color:#FF9900; font-weight:700; font-size:16px; margin-bottom:20px; padding-left:10px;'>BLOOMBERG_X // OS</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#FFD700; font-weight:700; font-size:16px; margin-bottom:20px; padding-left:10px;'>BLOOMBERG_X // OS</div>", unsafe_allow_html=True)
     st.button("<GO> 1 . MONITOR_DASHBOARD", on_click=set_page, args=('DASHBOARD',))
     st.button("<GO> 2 . TRADE_EXECUTION_LOG", on_click=set_page, args=('TRADE',))
     st.button("<GO> 3 . PERFORMANCE_HEATMAP", on_click=set_page, args=('HEATMAP',))
@@ -95,7 +98,7 @@ if st.session_state.page == 'DASHBOARD':
             with g_cols[idx]:
                 st.markdown(f"""
                     <div class='panel'>
-                        <div class='card-title' style='color:#FF9900;'>TOTAL {curr_str}</div>
+                        <div class='card-title' style='color:#FFD700;'>TOTAL {curr_str}</div>
                         <div class='stat-sub'>Aggregated Equity Portfolio</div>
                         <div class='stat-val'>{total_vault:,.2f}</div>
                         <div class='stat-sub' style='margin-top:6px;'>Available Liquidity: <span style='color:#00FF41;'>{total_liq:,.2f}</span></div>
@@ -231,7 +234,7 @@ elif st.session_state.page == 'HEATMAP':
             pivot_assets = daily_agg.pivot(index='month_name', columns='day', values='assets_list').reindex(index=months_order, columns=all_days).fillna("None")
 
             fig_daily = go.Figure(data=go.Heatmap(z=pivot_daily.values, x=pivot_daily.columns, y=pivot_daily.index, colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>MESE:</b> %{y}<br><b>GIORNO:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_trades.values, pivot_assets.values))))
-            fig_daily.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#D5D5D5", size=10), height=280, margin=dict(l=50,r=10,t=10,b=30))
+            fig_daily.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#D5D5D5", size=10), height=280, margin=dict(l=50, r=10, t=10, b=30))
             fig_daily.update_xaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             fig_daily.update_yaxes(gridcolor='#222222')
             st.plotly_chart(fig_daily, use_container_width=True)
@@ -245,7 +248,7 @@ elif st.session_state.page == 'HEATMAP':
             pivot_y_assets = yearly_agg.pivot(index='year', columns='month_name', values='assets_list').reindex(index=unique_years, columns=months_order).fillna("None")
 
             fig_yearly = go.Figure(data=go.Heatmap(z=pivot_yearly.values, x=pivot_yearly.columns, y=pivot_yearly.index, colorscale=[[0.0, "#FF3131"], [0.5, "#0A0A0A"], [1.0, "#00FF41"]], zmid=0.0, showscale=True, hovertemplate="<b>ANNO:</b> %{y}<br><b>MESE:</b> %{x}<br><b>P&L:</b> %{z:,.2f}<br><b>TRADE:</b> %{customdata[0]}<br><b>ASSET:</b> %{customdata[1]}<extra></extra>", customdata=list(zip(pivot_y_trades.values, pivot_y_assets.values))))
-            fig_yearly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#D5D5D5", size=10), height=180, margin=dict(l=50,r=10,t=10,b=30))
+            fig_yearly.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="Roboto Mono", color="#D5D5D5", size=10), height=180, margin=dict(l=50, r=10, t=10, b=30))
             fig_yearly.update_xaxes(gridcolor='#222222')
             fig_yearly.update_yaxes(tickmode="linear", dtick=1, gridcolor='#222222')
             st.plotly_chart(fig_yearly, use_container_width=True)
@@ -285,7 +288,7 @@ elif st.session_state.page == 'SETTINGS':
                     st.markdown(f"""
                         <div class='panel'>
                             <div class='card-title'>{acc.upper()} // <span style='color:#666;'>{curr}</span></div>
-                            <div class='stat-sub'>Total Equity Balance</div>
+                            <div class='total-label' style='font-size:9px; color:#666; text-transform:uppercase; font-weight:bold;'>Total Equity Balance</div>
                             <div class='stat-val'>{total_bal:,.2f}</div>
                             <div class='stat-sub' style='margin-top:10px;'>Free Cash Liquidity: <span style='color:#00FF41;'>{liq:,.2f}</span></div>
                         </div>
@@ -293,7 +296,7 @@ elif st.session_state.page == 'SETTINGS':
                 
                 with c_chart:
                     fig = px.pie(pd.DataFrame({"Cat": ["Cash", "Margin Locked"], "Val": [max(0, liq), margin_used]}), values='Val', names='Cat', hole=0.6, color_discrete_map={"Cash": "#00FF41", "Margin Locked": "#222"})
-                    fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=110, margin=dict(l=0,r=0,t=0,b=0))
+                    fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=110, margin=dict(l=0, r=0, t=0, b=0))
                     st.plotly_chart(fig, use_container_width=True, key=f"chart_{row_id}")
                 
                 with c_actions:
